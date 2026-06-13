@@ -286,12 +286,12 @@
         <div class="section-label" style="margin-top:1rem">Network</div>
         <div class="row">
           <div class="field">
-            <label>Directory URL</label>
-            <input bind:value={directoryUrl} placeholder="http://localhost:3001" />
+            <label for="dir-url">Directory URL</label>
+            <input id="dir-url" bind:value={directoryUrl} placeholder="http://localhost:3001" />
           </div>
           <div class="field">
-            <label>Server port</label>
-            <input type="number" bind:value={serverPort} min="1024" max="65535" />
+            <label for="srv-port">Server port</label>
+            <input id="srv-port" type="number" bind:value={serverPort} min="1024" max="65535" />
           </div>
         </div>
 

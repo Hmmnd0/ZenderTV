@@ -9,6 +9,7 @@
   let normStatus = $state({}); // path → 'pending'|'done'|'error'
   let queuedSet = $state(new Set());
   let bumperSet = $state(new Set());
+  let scanningFolders = $state(new Set()); // folders currently being scanned
 
   // Watch initialFolders reactively. Only `initialFolders` is tracked as a
   // dependency; everything else runs inside untrack() so reading/writing
@@ -56,15 +57,21 @@
   }
 
   let playNowError = $state(null);
+  let playNowPending = $state(null); // path of file currently being switched to
 
   async function scanFolder(dir) {
     if (isTauri) {
       const { readDir } = await import('@tauri-apps/plugin-fs');
+      scanningFolders = new Set([...scanningFolders, dir]);
       try {
         const files = await collectFiles(readDir, dir);
         folderFiles = { ...folderFiles, [dir]: files };
       } catch (e) {
         console.error('scanFolder error', e);
+      } finally {
+        const next = new Set(scanningFolders);
+        next.delete(dir);
+        scanningFolders = next;
       }
     }
   }
@@ -103,12 +110,16 @@
   }
 
   async function handlePlayNow(path) {
+    if (playNowPending) return; // ignore double-clicks while switching
     playNowError = null;
+    playNowPending = path;
     try {
       await playNow(path);
     } catch (e) {
       playNowError = e.message;
       setTimeout(() => { playNowError = null; }, 4000);
+    } finally {
+      playNowPending = null;
     }
   }
 
@@ -143,7 +154,11 @@
       <div class="folder">
         <div class="folder-name">
           <span>📁 {folder.split('/').pop()}</span>
-          <button class="refresh-btn" onclick={() => scanFolder(folder)} title="Refresh folder">↺</button>
+          {#if scanningFolders.has(folder)}
+            <span class="scanning">scanning…</span>
+          {:else}
+            <button class="refresh-btn" onclick={() => scanFolder(folder)} title="Refresh folder">↺</button>
+          {/if}
         </div>
         <div class="files">
           {#each (folderFiles[folder] ?? []) as file}
@@ -168,9 +183,11 @@
                 {#if connected}
                   <button
                     class="mini play-now"
+                    class:pending={playNowPending === file.path}
                     onclick={() => handlePlayNow(file.path)}
+                    disabled={!!playNowPending}
                     title="Play this immediately (skips current)"
-                  >▶ Now</button>
+                  >{playNowPending === file.path ? '⟳' : '▶ Now'}</button>
                 {/if}
                 <button
                   class="mini enqueue"
@@ -253,6 +270,14 @@
   }
   .refresh-btn:hover { color: #aaa; }
 
+  .scanning {
+    font-size: 0.7rem;
+    color: #887a00;
+    letter-spacing: 0.03em;
+    animation: blink 1s step-start infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
   .files { overflow-y: auto; max-height: 300px; }
 
   .file-row {
@@ -297,7 +322,8 @@
   .enqueue.queued { color: #2a6; border-color: #2a62; }
 
   .play-now { color: #fa4; border-color: #fa42; }
-  .play-now:hover { background: #1a1200; color: #fc6; }
+  .play-now:hover:not(:disabled) { background: #1a1200; color: #fc6; }
+  .play-now.pending { color: #777; border-color: #3333; cursor: not-allowed; }
 
   .bump-btn { color: #555; border-color: #2a2a2a; font-size: 0.65rem; padding: 0.1rem 0.25rem; }
   .bump-btn.bumper { color: #fa4; border-color: #fa44; background: #1a1200; }

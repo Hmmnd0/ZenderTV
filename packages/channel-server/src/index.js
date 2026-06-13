@@ -331,29 +331,54 @@ app.post('/control/enqueue', async (req, res) => {
   res.json({ ok: true });
 });
 
+function makeFeeder() {
+  return new QueueFeeder({
+    scheduler,
+    cacheDir,
+    streamCfg: cfg.stream,
+    onEnqueue: (n) => broadcaster?.enqueue(n),
+    onNowPlaying: (src) => {
+      nowPlaying = src
+        ? src.split('/').pop()?.replace(/(\.\w{2,4})?\.norm\.ts$/, '').replace(/\.\w{2,4}$/, '') ?? src
+        : null;
+      broadcast(getState());
+    },
+    onQueueChange: (items) => { upcomingQueue = items; broadcast(getState()); },
+  });
+}
+
+// Normalize a file, emitting progress to the Signal Log so the UI shows activity.
+function normalizeWithProgress(file) {
+  const label = file.split('/').pop()?.replace(/\.\w{2,4}$/, '') ?? file;
+  broadcast({ type: 'ffmpeg_log', level: 'info', line: `Encoding ${label} for playback…` });
+  return ensureNormalized(file, cacheDir, cfg.stream, isAudioFile(file), (secs) => {
+    broadcast({ type: 'norm_progress', file, secs });
+  });
+}
+
 app.post('/control/playnow', async (req, res) => {
   const { file } = req.body;
   if (!file) return res.status(400).json({ error: 'file required' });
   if (!isMediaFile(file)) return res.status(400).json({ error: 'not a media file' });
   if (!onAir) return res.status(400).json({ error: 'not on air' });
   try {
-    const norm = await ensureNormalized(file, cacheDir, cfg.stream, isAudioFile(file));
+    // Normalize first (instant if already cached; shows Signal Log progress if not)
+    const norm = await normalizeWithProgress(file);
+
+    // Hard-cut to the new file right away
+    feeder?.stop();
+    feeder = null;
     broadcaster.skip();
     broadcaster.restartFrom(norm);
-    feeder.stop();
-    feeder = new QueueFeeder({
-      scheduler,
-      cacheDir,
-      streamCfg: cfg.stream,
-      onEnqueue: (n) => broadcaster?.enqueue(n),
-      onNowPlaying: (src) => {
-        nowPlaying = src ? src.split('/').pop()?.replace(/(\.\w{2,4})?\.norm\.ts$/, '').replace(/\.\w{2,4}$/, '') ?? src : null;
-        broadcast(getState());
-      },
-      onQueueChange: (items) => { upcomingQueue = items; broadcast(getState()); },
-    });
-    await feeder.start(file, norm);
+    nowPlaying = file.split('/').pop()?.replace(/(\.\w{2,4})?\.norm\.ts$/, '').replace(/\.\w{2,4}$/, '') ?? file;
+    broadcast(getState());
+
+    // Respond immediately — don't wait for feeder's ffprobe / buffer fill
     res.json(getState());
+
+    // Start the feeder in the background so the queue refills without blocking
+    feeder = makeFeeder();
+    feeder.start(file, norm).catch(e => console.error('[playnow] feeder error:', e.message));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -363,24 +388,23 @@ app.post('/control/skip', async (req, res) => {
   if (!broadcaster || !feeder) return res.status(400).json({ error: 'not on air' });
   const next = scheduler.next(nowPlaying);
   if (!next) return res.status(400).json({ error: 'nothing in scheduler' });
-  const norm = await ensureNormalized(next, cacheDir, cfg.stream, isAudioFile(next));
+
+  // Normalize (instant if cached)
+  const norm = await normalizeWithProgress(next);
+
+  // Hard-cut immediately
+  feeder?.stop();
+  feeder = null;
   broadcaster.skip();
   broadcaster.restartFrom(norm);
-  // Reset feeder from this new starting point
-  feeder.stop();
-  feeder = new QueueFeeder({
-    scheduler,
-    cacheDir,
-    streamCfg: cfg.stream,
-    onEnqueue: (n) => broadcaster?.enqueue(n),
-    onNowPlaying: (src) => {
-      nowPlaying = src ? src.split('/').pop()?.replace(/(\.\w{2,4})?\.norm\.ts$/, '').replace(/\.\w{2,4}$/, '') ?? src : null;
-      broadcast(getState());
-    },
-    onQueueChange: (items) => { upcomingQueue = items; broadcast(getState()); },
-  });
-  await feeder.start(next, norm);
+  nowPlaying = next.split('/').pop()?.replace(/(\.\w{2,4})?\.norm\.ts$/, '').replace(/\.\w{2,4}$/, '') ?? next;
+  broadcast(getState());
+
+  // Respond right away — feeder setup (ffprobe + buffer fill) runs in background
   res.json(getState());
+
+  feeder = makeFeeder();
+  feeder.start(next, norm).catch(e => console.error('[skip] feeder error:', e.message));
 });
 
 app.post('/control/standby', async (req, res) => {

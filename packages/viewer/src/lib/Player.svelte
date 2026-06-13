@@ -47,7 +47,13 @@
       videoEl.src = url;
       videoEl.onerror = () => { error = 'standby'; };
     } else if (Hls.isSupported()) {
-      hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+      hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        maxBufferLength: 10,          // seconds buffered ahead (default 30)
+        liveSyncDurationCount: 2,     // stay 2 segments from live edge (12s vs default 18s)
+        liveMaxLatencyDurationCount: 4,
+      });
       hls.loadSource(url);
       hls.attachMedia(videoEl);
       hls.on(Hls.Events.ERROR, (_, data) => {
