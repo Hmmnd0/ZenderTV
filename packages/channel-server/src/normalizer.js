@@ -86,6 +86,28 @@ export function normalizeAudioTo(srcPath, destPath, streamCfg, onProgress) {
   });
 }
 
+export function generateStandby(destPath, streamCfg) {
+  return new Promise((resolve, reject) => {
+    const { resolution, videoBitrate, audioBitrate, fps } = streamCfg;
+    const args = [
+      '-f', 'lavfi', '-i', `smptehdbars=size=${resolution}:rate=${fps}`,
+      '-f', 'lavfi', '-i', 'aevalsrc=0:channel_layout=stereo:sample_rate=44100',
+      '-t', '10',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', videoBitrate,
+      '-x264opts', 'keyint=180:min-keyint=180:no-scenecut',
+      '-c:a', 'aac', '-b:a', audioBitrate, '-ar', '44100', '-ac', '2',
+      '-y', destPath,
+    ];
+    const proc = spawn('ffmpeg', args);
+    let stderr = '';
+    proc.stderr.on('data', d => { stderr += d; });
+    proc.on('close', code => {
+      if (code === 0) resolve(destPath);
+      else reject(new Error(`standby gen failed (${code}): ${stderr.slice(-200)}`));
+    });
+  });
+}
+
 export async function ensureNormalized(srcPath, cacheDir, streamCfg, isAudio, onProgress) {
   mkdirSync(cacheDir, { recursive: true });
   const dest = normCachePath(cacheDir, srcPath);

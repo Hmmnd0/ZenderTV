@@ -12,7 +12,7 @@ import { QueueFeeder } from './queue-feeder.js';
 import { RelayUploader } from './relay.js';
 import { DirectoryClient } from './directory-client.js';
 import { ViewerCounter } from './viewer-counter.js';
-import { ensureNormalized, isAudioFile, isMediaFile } from './normalizer.js';
+import { ensureNormalized, generateStandby, isAudioFile, isMediaFile } from './normalizer.js';
 
 const configPath = process.argv[2] ?? 'channel.toml';
 const cfg = loadConfig(configPath);
@@ -129,7 +129,11 @@ async function _goOnAir() {
 
   const firstName = firstSrc.split('/').pop()?.replace(/\.\w{2,4}$/, '') ?? firstSrc;
   broadcastStartup('normalizing', { file: firstName });
-  const firstNorm = await ensureNormalized(firstSrc, cacheDir, cfg.stream, isAudioFile(firstSrc));
+  const standbySrc = join(cacheDir, 'standby.ts');
+  const [firstNorm] = await Promise.all([
+    ensureNormalized(firstSrc, cacheDir, cfg.stream, isAudioFile(firstSrc)),
+    existsSync(standbySrc) ? Promise.resolve() : generateStandby(standbySrc, cfg.stream).catch(e => console.error('[standby] gen failed:', e.message)),
+  ]);
 
   if (cfg.server.mode === 'relay' && cfg.server.relayUrl) {
     relay = new RelayUploader(cfg.server.relayUrl, null);

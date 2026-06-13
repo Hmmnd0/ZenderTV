@@ -23,6 +23,17 @@
   );
   // pendingQueue items are now { path, name } objects
   const pending = $derived(state.pendingQueue ?? []);
+
+  let standbyError = $state(null);
+  async function handleStandby() {
+    standbyError = null;
+    try {
+      await standby();
+    } catch (e) {
+      standbyError = e.message;
+      setTimeout(() => { standbyError = null; }, 4000);
+    }
+  }
 </script>
 
 <div class="queue">
@@ -76,8 +87,11 @@
   <div class="section-header" style="margin-top:auto">CONTROLS</div>
   <div class="actions">
     <button onclick={() => skip()} disabled={!state.onAir} title="Skip to next item in queue">⏭ Skip</button>
-    <button onclick={() => standby()} disabled={!state.onAir} class="danger" title="Cut to standby screen">⚠ Standby</button>
+    <button onclick={handleStandby} disabled={!state.onAir} class="danger" title="Cut to standby screen">⚠ Standby</button>
   </div>
+  {#if standbyError}
+    <div class="standby-error">{standbyError}</div>
+  {/if}
   <div class="hint">
     Use <strong>▶ Now</strong> in the library to jump to any file.<br/>
     Use <strong>+ Queue</strong> to add to the end of the line.
@@ -201,6 +215,14 @@
   button:not(:disabled):hover { background: #222; }
   button.danger { border-color: #a00; color: #f88; }
   button.danger:not(:disabled):hover { background: #1a0000; }
+
+  .standby-error {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.7rem;
+    color: #f84;
+    background: #1a0800;
+    border-top: 1px solid #5a2000;
+  }
 
   .hint {
     padding: 0.5rem;

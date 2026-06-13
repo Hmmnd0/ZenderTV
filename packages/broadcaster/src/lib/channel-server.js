@@ -90,7 +90,9 @@ export async function skip() {
 
 export async function standby() {
   const res = await fetch(`${BASE}/control/standby`, { method: 'POST' });
-  return res.json();
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error ?? 'Standby failed');
+  return body;
 }
 
 export async function normalizeFile(file) {
