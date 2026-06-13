@@ -103,8 +103,22 @@ function getState() {
 }
 
 // --- Broadcaster lifecycle ---
+let _startingUp = false; // sync guard — prevents concurrent goOnAir() calls
+
 async function goOnAir() {
-  if (onAir) return;
+  if (onAir || _startingUp) return;
+  _startingUp = true;
+  try {
+    await _goOnAir();
+  } finally {
+    _startingUp = false;
+  }
+}
+
+async function _goOnAir() {
+  // Wipe any stale segments from a previous session so an old server's files
+  // can never interleave with the new stream.
+  clearGeneratedFiles();
 
   const firstSrc = scheduler.next(null);
   if (!firstSrc) throw new Error('No media available in scheduler');

@@ -63,9 +63,17 @@
   async function launchServer(configPath) {
     if (!configPath) return;
     localStorage.setItem('zender_last_toml', configPath);
-    // Kill any stale server that may be holding the port from a previous crash.
+    // Ask the old server to shut down, then wait until the port is actually free.
     await shutdownServer().catch(() => {});
-    await new Promise(r => setTimeout(r, 600));
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      try {
+        await fetch('http://localhost:8047/control/state', { signal: AbortSignal.timeout(300) });
+        await new Promise(r => setTimeout(r, 300)); // still responding — keep waiting
+      } catch {
+        break; // connection refused = port is free
+      }
+    }
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const projectRoot = import.meta.env.VITE_PROJECT_ROOT;
