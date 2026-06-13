@@ -328,6 +328,97 @@ Radio at 128 kbps handles ~70 listeners on a modest home connection. Run the cha
 
 ---
 
+## Releases
+
+Pre-built binaries for macOS (Apple Silicon), Linux, and Windows are published to [GitHub Releases](https://github.com/Hmmnd0/zender/releases) automatically when a version tag is pushed:
+
+```bash
+git tag v0.2.0
+git push --tags
+```
+
+GitHub Actions builds all three platforms in parallel using the workflow in `.github/workflows/release.yml`. Each release includes:
+
+- **Zender** (viewer) — `.dmg` for macOS, `.AppImage` + `.deb` for Linux, `.exe` + `.msi` for Windows
+- **Zender Broadcaster** — same platforms
+
+> **Note on the Broadcaster distribution build:** The Broadcaster currently bakes the development machine's Node path and project root into the binary at compile time (`vite.config.js`). This means the "auto-launch channel server" feature in the distributed app won't work on an end-user's machine — those paths won't exist. Until the channel server is bundled as a [Tauri sidecar](https://tauri.app/develop/sidecar/), users running the distributed Broadcaster should start the channel server manually and click **Retry Connection**:
+> ```bash
+> node packages/channel-server/src/index.js /path/to/channel.toml
+> ```
+> The Viewer app has no such limitation and distributes cleanly.
+
+---
+
+## Building from source
+
+You need: **Node 20+**, **Rust** (via [rustup](https://rustup.rs)), **ffmpeg**, and the platform's native build tools.
+
+### macOS
+
+```bash
+xcode-select --install   # if not already installed
+brew install ffmpeg
+
+git clone https://github.com/Hmmnd0/zender.git
+cd zender
+npm install
+
+# Viewer
+cd packages/viewer
+npm run tauri build
+# → src-tauri/target/release/bundle/dmg/Zender_*.dmg
+
+# Broadcaster
+cd ../broadcaster
+npm run tauri build
+# → src-tauri/target/release/bundle/dmg/Zender\ Broadcaster_*.dmg
+```
+
+macOS will block unsigned apps with "unidentified developer." Right-click → Open to bypass, or run from Terminal:
+```bash
+xattr -dr com.apple.quarantine /Applications/Zender.app
+```
+
+### Linux
+
+```bash
+sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf ffmpeg
+
+git clone https://github.com/Hmmnd0/zender.git
+cd zender && npm install
+
+# Viewer
+cd packages/viewer && npm run tauri build
+# → src-tauri/target/release/bundle/appimage/zender_*.AppImage
+# → src-tauri/target/release/bundle/deb/zender_*.deb
+
+# Broadcaster
+cd ../broadcaster && npm run tauri build
+# → src-tauri/target/release/bundle/appimage/zender-broadcaster_*.AppImage
+```
+
+### Windows
+
+Install [Node](https://nodejs.org), [Rust](https://rustup.rs), [ffmpeg](https://ffmpeg.org/download.html) (add to PATH), and the [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (usually pre-installed on Windows 11).
+
+```powershell
+git clone https://github.com/Hmmnd0/zender.git
+cd zender
+npm install
+
+cd packages\viewer
+npm run tauri build
+# → src-tauri\target\release\bundle\nsis\Zender_*-setup.exe
+# → src-tauri\target\release\bundle\msi\Zender_*.msi
+
+cd ..\broadcaster
+npm run tauri build
+```
+
+---
+
 ## Legal
 
 Zender is content-neutral software. If you run a public directory server, you need a DMCA takedown policy, a contact address, and the moderation tooling (ban/report endpoints in the directory) in place before you open it to the public. The directory server code includes report and ban stubs — wire them up.

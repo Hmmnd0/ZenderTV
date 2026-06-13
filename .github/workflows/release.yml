@@ -1,0 +1,154 @@
+name: Release
+
+# Runs when you push a version tag: git tag v0.2.0 && git push --tags
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # ── 1. Create a draft GitHub release ───────────────────────────────────────
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create draft release
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: `Zender ${tag}`,
+              body: `## What's new\n\n_Fill this in before publishing._\n\n---\n\n**Viewer** — the audience app (guide + player). Works on all platforms.\n\n**Broadcaster** — the source client. See the README for channel-server setup notes.`,
+              draft: true,
+              prerelease: false,
+            });
+            return data.id;
+          result-encoding: string
+
+  # ── 2. Build Tauri apps on every platform ──────────────────────────────────
+  build:
+    needs: create-release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS — ARM64 (Apple Silicon M1/M2/M3)
+          # Intel Macs can run this via Rosetta 2.
+          # To add a native Intel build, duplicate this entry with:
+          #   platform: macos-13
+          #   args: --target x86_64-apple-darwin
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust_target: aarch64-apple-darwin
+
+          # Linux — produces .AppImage and .deb
+          - platform: ubuntu-22.04
+            args: ''
+            rust_target: ''
+
+          # Windows — produces NSIS installer (.exe) and .msi
+          - platform: windows-latest
+            args: ''
+            rust_target: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            packages/broadcaster/src-tauri
+            packages/viewer/src-tauri
+
+      # Linux needs GTK + WebKit system libraries
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # Install all workspace deps from the root
+      - name: Install npm dependencies
+        run: npm ci
+
+      # ── Viewer ────────────────────────────────────────────────────────────
+      # The viewer is a clean distribution build — fetches the channel guide
+      # from a directory server and plays HLS streams. No local path deps.
+      - name: Build Viewer
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          projectPath: packages/viewer
+          args: ${{ matrix.args }}
+
+      # ── Broadcaster ───────────────────────────────────────────────────────
+      # NOTE: The Broadcaster bakes VITE_PROJECT_ROOT and VITE_NODE_BIN as
+      # absolute paths at build time (packages/broadcaster/vite.config.js).
+      # The built app's "launch channel server" feature will NOT work on an
+      # end-user's machine because those paths won't exist there.
+      #
+      # Until the channel server is bundled as a Tauri sidecar resource, the
+      # distributed Broadcaster is useful for the UI but users need to run
+      # the channel server manually:
+      #   node packages/channel-server/src/index.js channel.toml
+      # then point the Broadcaster at it via "Retry Connection".
+      #
+      # We still publish the build so users can try it without compiling Rust.
+      - name: Build Broadcaster
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          projectPath: packages/broadcaster
+          args: ${{ matrix.args }}
+
+  # ── 3. Publish the draft once all platforms finish ─────────────────────────
+  publish-release:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release_id }},
+              draft: false,
+            });
