@@ -15,6 +15,9 @@ export default defineConfig({
   preview: {
     host: true,
     port: 4173,
+    proxy: {
+      '/api': 'http://localhost:3001',
+    },
   },
   build: {
     rollupOptions: {
