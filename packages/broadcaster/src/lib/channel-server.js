@@ -37,6 +37,12 @@ export async function getState() {
   return res.json();
 }
 
+export async function fetchConfig() {
+  const res = await fetch(`${BASE}/control/config`);
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
 export async function setOnAir(on) {
   const res = await fetch(`${BASE}/control/onair`, {
     method: 'POST',

@@ -22,10 +22,11 @@
 
   // Step 4: Privacy + stream settings
   let privacyMode = $state('relay');
+  let relayUrl = $state('');
   let resolution = $state('1280x720');
   let videoBitrate = $state('2500k');
   let audioBitrate = $state('128k');
-  let directoryUrl = $state('http://localhost:3001');
+  let directoryUrl = $state('https://zender.tv');
   let serverPort = $state(8047);
 
   let saving = $state(false);
@@ -137,7 +138,7 @@
     lines.push(`[server]`);
     lines.push(`port       = ${serverPort}`);
     lines.push(`mode       = ${JSON.stringify(privacyMode)}`);
-    lines.push(`relay_url  = ""`);
+    lines.push(`relay_url  = ${JSON.stringify(relayUrl)}`);
     lines.push(`public_url = ""`);
 
     return lines.join('\n') + '\n';
@@ -253,9 +254,16 @@
             <input type="radio" bind:group={privacyMode} value="relay" />
             <div>
               <strong>🔒 Relay <span class="rec">(recommended)</span></strong>
-              <p>Your IP stays private. Stream is uploaded to the network relay. No port forwarding needed.</p>
+              <p>Your IP stays private. Stream is pushed to a relay server. No port forwarding needed.</p>
             </div>
           </label>
+          {#if privacyMode === 'relay'}
+            <div class="field relay-url-field">
+              <label for="relay-url">Relay ingest URL</label>
+              <input id="relay-url" bind:value={relayUrl} placeholder="https://your-relay.com/ingest/channel-id/" />
+              <span class="field-hint">Leave blank to configure later in the Scheduler panel.</span>
+            </div>
+          {/if}
           <label class="privacy-opt" class:selected={privacyMode === 'direct'}>
             <input type="radio" bind:group={privacyMode} value="direct" />
             <div>
@@ -458,6 +466,9 @@
   .mode-opt strong, .privacy-opt strong { font-size: 0.88rem; display: block; margin-bottom: 0.2rem; }
   .mode-opt p, .privacy-opt p { font-size: 0.78rem; color: #888; margin: 0; line-height: 1.4; }
   .rec { color: #4a9; font-size: 0.78rem; font-weight: normal; }
+
+  .relay-url-field { margin-left: 0.5rem; margin-top: 0.25rem; }
+  .field-hint { font-size: 0.7rem; color: #555; margin-top: 0.15rem; }
 
   .section-label { font-size: 0.7rem; color: #666; letter-spacing: 0.08em; margin-bottom: 0.4rem; }
 

@@ -6,7 +6,7 @@
   import SchedulerPanel from './lib/SchedulerPanel.svelte';
   import ChannelWizard from './lib/ChannelWizard.svelte';
   import ConnectivityCheck from './lib/ConnectivityCheck.svelte';
-  import { getState, setOnAir, subscribeToEvents, shutdownServer } from './lib/channel-server.js';
+  import { getState, fetchConfig, setOnAir, subscribeToEvents, shutdownServer } from './lib/channel-server.js';
 
   const DEFAULT_STATE = { onAir: false, nowPlaying: null, upcomingQueue: [], viewers: 0, uptime: 0, mode: 'relay' };
 
@@ -16,7 +16,6 @@
   let connected = $state(false);
   let normEvents = $state([]);
 
-  let channelConfig = $state(null);  // parsed channel.toml config
   let channelName = $state('My Channel');
 
   let showWizard = $state(false);
@@ -28,6 +27,8 @@
   let initialFolders = $state([]);
   let ffmpegLogs = $state([]);
   let startupPhase = $state(null); // null = idle, string = phase name, object = {phase, file?}
+  let channelConfig = $state(null);
+  let configPath = $state(null);
 
   onMount(async () => {
     // Try to connect to an already-running server first
@@ -65,6 +66,7 @@
     try {
       serverState = await getState();
       connected = true;
+      channelConfig = await fetchConfig().catch(() => null);
     } catch {
       connected = false;
     }
@@ -168,7 +170,7 @@
   }
 
   async function loadChannelFromToml(path) {
-    // Extract name and folder paths from the toml before launching.
+    configPath = path;
     if (isTauri) {
       try {
         const { readTextFile } = await import('@tauri-apps/plugin-fs');
@@ -202,7 +204,6 @@
 
   function handleSchedulerSave(updatedConfig) {
     channelConfig = updatedConfig;
-    // In a full impl, write back to channel.toml via Tauri fs
   }
 </script>
 
@@ -264,7 +265,7 @@
       </main>
 
       <aside class="pane scheduler-pane">
-        <SchedulerPanel config={channelConfig} onSave={handleSchedulerSave} {bumpers} {connected} />
+        <SchedulerPanel config={channelConfig} {configPath} onSave={handleSchedulerSave} {bumpers} {connected} />
       </aside>
     </div>
   {/if}

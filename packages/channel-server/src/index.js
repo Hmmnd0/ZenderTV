@@ -422,6 +422,8 @@ app.post('/control/standby', async (req, res) => {
 
 app.get('/control/state', (_req, res) => res.json(getState()));
 
+app.get('/control/config', (_req, res) => res.json(cfg));
+
 app.get('/control/debug', (_req, res) => {
   let playlistContents = null;
   let segmentCount = 0;
