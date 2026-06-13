@@ -120,9 +120,7 @@ function broadcastStartup(phase, detail = {}) {
 }
 
 async function _goOnAir() {
-  // Wipe any stale segments from a previous session so an old server's files
-  // can never interleave with the new stream.
-  clearGeneratedFiles();
+  clearPublicDir();
 
   const firstSrc = scheduler.next(null);
   if (!firstSrc) throw new Error('No media available in scheduler');
@@ -514,22 +512,23 @@ server.on('upgrade', (req, socket, head) => {
 const PORT = cfg.server.port;
 server.listen(PORT, () => {
   console.log(`[channel-server] "${cfg.channel.name}" — :${PORT} — mode: ${cfg.server.mode}`);
+  // Clear any stale HLS segments left by a previous crashed session.
+  // Normalized cache files (cacheDir) are deliberately kept.
+  clearPublicDir();
 });
 
-function clearGeneratedFiles() {
-  for (const dir of [cacheDir, publicDir]) {
-    try {
-      for (const f of readdirSync(dir)) {
-        try { unlinkSync(join(dir, f)); } catch {}
-      }
-    } catch {}
-  }
-  console.log('[channel-server] cache and stream files cleared');
+function clearPublicDir() {
+  try {
+    for (const f of readdirSync(publicDir)) {
+      try { unlinkSync(join(publicDir, f)); } catch {}
+    }
+  } catch {}
+  console.log('[channel-server] stale stream files cleared');
 }
 
 async function shutdown() {
   await goOffAir();
-  clearGeneratedFiles();
+  clearPublicDir();
 }
 
 process.on('SIGTERM', async () => { await shutdown(); process.exit(0); });

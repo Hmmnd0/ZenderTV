@@ -1,7 +1,7 @@
 <script>
   import { skip, standby, dequeueFile } from './channel-server.js';
 
-  let { state, logs = [] } = $props();
+  let { state: s, logs = [] } = $props();
 
   function basename(p) {
     if (!p) return '';
@@ -13,16 +13,16 @@
   function fmtDuration(secs) {
     if (!secs) return '';
     const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s.toString().padStart(2, '0')}`;
+    const sec = Math.floor(secs % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
   }
 
   // Skip index 0 (now playing) and filter out loop placeholders
   const upcoming = $derived(
-    (state.upcomingQueue ?? []).slice(1).filter(i => !i.isLoop)
+    (s.upcomingQueue ?? []).slice(1).filter(i => !i.isLoop)
   );
   // pendingQueue items are now { path, name } objects
-  const pending = $derived(state.pendingQueue ?? []);
+  const pending = $derived(s.pendingQueue ?? []);
 
   let standbyError = $state(null);
   async function handleStandby() {
@@ -38,12 +38,12 @@
 
 <div class="queue">
   <div class="section-header">NOW PLAYING</div>
-  {#if state.nowPlaying && state.nowPlaying !== 'STANDBY'}
+  {#if s.nowPlaying && s.nowPlaying !== 'STANDBY'}
     <div class="now-playing-row">
       <span class="play-icon">▶</span>
-      <span class="title">{basename(state.nowPlaying)}</span>
+      <span class="title">{basename(s.nowPlaying)}</span>
     </div>
-  {:else if state.nowPlaying === 'STANDBY'}
+  {:else if s.nowPlaying === 'STANDBY'}
     <div class="now-playing-row standby">
       <span class="play-icon">⚠</span>
       <span class="title">STANDBY — Technical Difficulties</span>
@@ -56,7 +56,7 @@
   <div class="upcoming-list">
     {#if pending.length === 0 && upcoming.length === 0}
       <div class="empty-queue">
-        {#if state.onAir}
+        {#if s.onAir}
           Looping current item — use <strong>+ Queue</strong> in the library to add more
         {:else}
           Nothing queued
@@ -86,8 +86,8 @@
 
   <div class="section-header" style="margin-top:auto">CONTROLS</div>
   <div class="actions">
-    <button onclick={() => skip()} disabled={!state.onAir} title="Skip to next item in queue">⏭ Skip</button>
-    <button onclick={handleStandby} disabled={!state.onAir} class="danger" title="Cut to standby screen">⚠ Standby</button>
+    <button onclick={() => skip()} disabled={!s.onAir} title="Skip to next item in queue">⏭ Skip</button>
+    <button onclick={handleStandby} disabled={!s.onAir} class="danger" title="Cut to standby screen">⚠ Standby</button>
   </div>
   {#if standbyError}
     <div class="standby-error">{standbyError}</div>
