@@ -3,7 +3,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { join, resolve } from 'path';
-import { mkdirSync, existsSync, readdirSync, unlinkSync } from 'fs';
+import { mkdirSync, existsSync, readdirSync, unlinkSync, readFileSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { loadConfig } from './config.js';
 import { Scheduler } from './scheduler.js';
@@ -115,6 +115,10 @@ async function goOnAir() {
   }
 }
 
+function broadcastStartup(phase, detail = {}) {
+  broadcast({ type: 'startup', phase, ...detail });
+}
+
 async function _goOnAir() {
   // Wipe any stale segments from a previous session so an old server's files
   // can never interleave with the new stream.
@@ -123,12 +127,15 @@ async function _goOnAir() {
   const firstSrc = scheduler.next(null);
   if (!firstSrc) throw new Error('No media available in scheduler');
 
+  const firstName = firstSrc.split('/').pop()?.replace(/\.\w{2,4}$/, '') ?? firstSrc;
+  broadcastStartup('normalizing', { file: firstName });
   const firstNorm = await ensureNormalized(firstSrc, cacheDir, cfg.stream, isAudioFile(firstSrc));
 
   if (cfg.server.mode === 'relay' && cfg.server.relayUrl) {
     relay = new RelayUploader(cfg.server.relayUrl, null);
   }
 
+  broadcastStartup('starting_stream');
   broadcaster = new Broadcaster(workDir, cfg, async (segPath) => {
     if (relay) {
       await relay.uploadSegment(segPath);
@@ -141,6 +148,7 @@ async function _goOnAir() {
     if (onAir && !_restarting) {
       _restarting = true;
       console.log('[broadcaster] auto-restarting in 3s…');
+      broadcast({ type: 'ffmpeg_log', level: 'error', line: `ffmpeg crashed — auto-restarting in 3s… (${err.message})` });
       setTimeout(async () => {
         try {
           if (!onAir) return;
@@ -148,11 +156,14 @@ async function _goOnAir() {
           await goOnAir();
         } catch (e) {
           console.error('[broadcaster] auto-restart failed:', e.message);
+          broadcast({ type: 'ffmpeg_log', level: 'error', line: `auto-restart failed: ${e.message}` });
         } finally {
           _restarting = false;
         }
       }, 3000);
     }
+  }, (logEntry) => {
+    broadcast({ type: 'ffmpeg_log', ...logEntry });
   });
 
   broadcaster.start(firstNorm);
@@ -183,6 +194,7 @@ async function _goOnAir() {
     try {
       // Wait up to 30 s for the first HLS playlist to appear before registering.
       // ffmpeg needs at least one segment duration before live.m3u8 is written.
+      broadcastStartup('waiting_stream');
       await (async () => {
         const m3u8 = join(publicDir, 'live.m3u8');
         const deadline = Date.now() + 30_000;
@@ -190,6 +202,7 @@ async function _goOnAir() {
           await new Promise(r => setTimeout(r, 500));
         }
       })();
+      broadcastStartup('registering');
       const { secret } = await directory.register(streamUrl, thumbUrl, cfg.server.mode === 'relay');
       if (relay) relay.secret = secret;
       directory.startHeartbeat(
@@ -290,9 +303,17 @@ app.get('/connectivity-check', (_req, res) => {
 // Control API
 app.post('/control/onair', async (req, res) => {
   try {
-    if (req.body.on) await goOnAir();
-    else await goOffAir();
-    res.json(getState());
+    if (req.body.on) {
+      // Kick off startup in background; progress arrives via WebSocket events.
+      res.json({ ok: true, startingUp: true });
+      goOnAir().catch(e => {
+        console.error('[onair] startup failed:', e.message);
+        broadcast({ type: 'startup_error', message: e.message });
+      });
+    } else {
+      await goOffAir();
+      res.json(getState());
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -374,6 +395,31 @@ app.post('/control/standby', async (req, res) => {
 });
 
 app.get('/control/state', (_req, res) => res.json(getState()));
+
+app.get('/control/debug', (_req, res) => {
+  let playlistContents = null;
+  let segmentCount = 0;
+  let latestSegmentMtime = null;
+  try { playlistContents = readFileSync(join(workDir, 'playlist.txt'), 'utf8'); } catch {}
+  try {
+    const segs = readdirSync(publicDir).filter(f => f.endsWith('.ts')).sort();
+    segmentCount = segs.length;
+    if (segs.length) {
+      const last = join(publicDir, segs[segs.length - 1]);
+      latestSegmentMtime = statSync(last).mtime;
+    }
+  } catch {}
+  res.json({
+    onAir,
+    ffmpegPid: broadcaster?.ffmpeg?.pid ?? null,
+    ffmpegRestarts: broadcaster?._restartCount ?? 0,
+    feederItems: feeder?.upcomingItems ?? [],
+    playlistContents,
+    segmentCount,
+    latestSegmentMtime,
+    uptime: broadcaster?.uptime ?? 0,
+  });
+});
 
 app.post('/control/dequeue', (req, res) => {
   const { file } = req.body;

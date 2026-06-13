@@ -4,14 +4,27 @@ Self-hosted internet TV and radio broadcasting. Point it at a folder of videos o
 
 Inspired by SHOUTcast and Winamp TV. No accounts, no platform, no algorithm.
 
+<table>
+  <tr>
+    <td><img src="docs/viewer-guide.png" alt="Viewer — channel guide" /></td>
+    <td><img src="docs/viewer-player.png" alt="Viewer — watching a channel" /></td>
+    <td><img src="docs/broadcaster.png" alt="Broadcaster — on air" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Channel guide</em></td>
+    <td align="center"><em>Watching live</em></td>
+    <td align="center"><em>Broadcasting</em></td>
+  </tr>
+</table>
+
 ---
 
 ## How it works
 
 ```
- YOUR MACHINE                        YOUR SERVER               AUDIENCE
+ YOUR MACHINE                        ZENDER                    AUDIENCE
 ┌───────────────────────┐       ┌──────────────────┐     ┌──────────────────┐
-│  Broadcaster App      │       │ Directory Server  │     │ Viewer App       │
+│  Broadcaster App      │       │ Channel Directory │     │ Viewer App       │
 │  (playlist, scheduler,│─reg──▶│ (channel guide,  │◀────│ (guide + player) │
 │   ON AIR button)      │       │  heartbeats)      │     └──────────────────┘
 │          │            │       └──────────────────┘              │
@@ -21,17 +34,7 @@ Inspired by SHOUTcast and Winamp TV. No accounts, no platform, no algorithm.
 └───────────────────────┘
 ```
 
-Five components:
-
-| Component | What it does |
-|---|---|
-| **Broadcaster** | Tauri desktop app — media library, queue, scheduler, ON AIR toggle |
-| **Channel Server** | Node + ffmpeg pipeline, serves HLS segments over HTTP |
-| **Directory Server** | Central channel guide API — channels register and heartbeat here |
-| **Viewer** | Web app + Tauri desktop — guide grid and player |
-| **Relay** *(optional)* | Static file server for broadcasters who can't port-forward |
-
-The broadcaster and channel server ship together in one installer. The directory server is the only component you need to host separately.
+When you go ON AIR, the Broadcaster registers your channel with the Zender directory. Viewers open the Viewer app, see your channel in the guide, and stream directly from your machine. No middleman.
 
 ---
 
@@ -39,109 +42,11 @@ The broadcaster and channel server ship together in one installer. The directory
 
 | Tool | Required for |
 |---|---|
-| **Node.js 20+** | Channel server, directory server, dev tooling |
-| **ffmpeg** | All media work — normalize, concat, segment, thumbnail |
-| **Rust + Cargo** | Building the Tauri desktop apps (broadcaster, viewer) |
-| **npm** | Package management |
+| **ffmpeg** | All media — normalize, segment, thumbnail |
+| **Node.js 20+** | Headless channel server (VPS / 24-7 use) |
+| **Rust + Cargo** | Building the desktop apps from source |
 
 Install ffmpeg via your package manager (`brew install ffmpeg`, `apt install ffmpeg`, etc.). Rust via [rustup](https://rustup.rs).
-
----
-
-## Directory Server
-
-The directory is what turns scattered channels into a network. Everyone points their `channel.toml` at the same directory URL, and the guide updates in real time.
-
-### Run with Docker
-
-```bash
-docker build -t zender-directory ./packages/directory-server
-
-docker run -d \
-  --name zender-directory \
-  -p 3001:3001 \
-  -v zender-data:/app/data \
-  zender-directory
-```
-
-The SQLite database is stored in `/app/data` — mount a volume there so it survives container restarts.
-
-### Run without Docker
-
-```bash
-cd packages/directory-server
-npm install
-node src/index.js
-```
-
-Listens on port `3001` by default. Set `PORT` env var to change it.
-
-### Deploy to Fly.io
-
-A `fly.toml` is included in `packages/directory-server`. It provisions a shared CPU instance with a persistent volume for SQLite.
-
-```bash
-cd packages/directory-server
-
-# One-time setup
-fly launch --no-deploy
-fly vol create zender_data -s 1 -r ord   # change region as needed
-
-# Deploy
-fly deploy
-```
-
-Change `primary_region` in `fly.toml` to the region closest to your audience (`lhr` for London, `fra` for Frankfurt, `ewr` for New York, etc.).
-
-### Directory API
-
-```
-POST /api/register          Register a channel, get back { id, secret }
-POST /api/heartbeat         Keep-alive every 30s while on air
-GET  /api/channels          Fetch the live channel list (filters: type, genre, sort)
-DELETE /api/channels/:id    Deregister on going off air
-```
-
-Channels that miss a heartbeat for 90 seconds drop off the guide automatically — same mechanic as the original SHOUTcast directory.
-
----
-
-## Channel Server (standalone / headless)
-
-The channel server is normally launched automatically by the Broadcaster app, but you can run it headless on a VPS for 24/7 channels.
-
-```bash
-cd packages/channel-server
-npm install
-node src/index.js /path/to/channel.toml
-```
-
-Point it at a `channel.toml` (see configuration below). The server normalizes media files into a per-channel cache, segments the output into HLS, and registers itself with the directory when you go on air.
-
-Working files (HLS segments, cache, playlist) are written to `~/Movies/Zender/<channel-name>/` on macOS and `~/Videos/Zender/<channel-name>/` on Windows/Linux. Cache is cleared on shutdown.
-
-**Headless on a VPS with systemd:**
-
-```ini
-# /etc/systemd/system/zender-channel.service
-[Unit]
-Description=Zender Channel Server
-After=network.target
-
-[Service]
-ExecStart=/usr/bin/node /opt/zender/packages/channel-server/src/index.js /opt/zender/channel.toml
-WorkingDirectory=/opt/zender
-Restart=on-failure
-User=zender
-Environment=NODE_ENV=production
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-systemctl enable --now zender-channel
-```
 
 ---
 
@@ -179,14 +84,14 @@ every_minutes = 60
 folder        = "/path/to/station-ids"
 
 [directory]
-url    = "http://localhost:3001"   # URL of your directory server
-public = true                      # false = off the guide (unlisted stream)
+url    = "https://zender.tv"   # Zender channel directory
+public = true                  # false = unlisted (stream still works, just hidden from guide)
 
 [server]
 port       = 8047
-mode       = "relay"               # "relay" (IP private) or "direct" (lower latency)
-relay_url  = ""                    # relay ingest URL if using relay mode
-public_url = ""                    # leave blank for auto-detect
+mode       = "relay"           # "relay" (IP private) or "direct" (lower latency)
+relay_url  = ""                # relay ingest URL if using relay mode
+public_url = ""                # leave blank for auto-detect
 ```
 
 **Scheduler modes:**
@@ -196,77 +101,39 @@ public_url = ""                    # leave blank for auto-detect
 
 ---
 
-## Broadcaster App (Desktop)
+## Channel Server (standalone / headless)
 
-The Broadcaster is a Tauri desktop app that bundles a UI (Svelte) and the channel server. It handles everything: creating a channel, adding media, scheduling, and going on air.
-
-### Development
+The channel server is bundled inside the Broadcaster app, but you can also run it headless on a VPS for 24/7 channels that don't depend on your home machine staying on.
 
 ```bash
+cd packages/channel-server
 npm install
-cd packages/broadcaster
-npm install
-npm run tauri dev
+node src/index.js /path/to/channel.toml
 ```
 
-### Build
+Working files (HLS segments, cache, playlist) are written to `~/Movies/Zender/<channel-name>/` on macOS and `~/Videos/Zender/<channel-name>/` on Windows/Linux.
 
-```bash
-cd packages/broadcaster
-npm run tauri build
+**Headless on a VPS with systemd:**
+
+```ini
+# /etc/systemd/system/zender-channel.service
+[Unit]
+Description=Zender Channel Server
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/zender/packages/channel-server/src/index.js /opt/zender/channel.toml
+WorkingDirectory=/opt/zender
+Restart=on-failure
+User=zender
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-Produces a signed installer in `src-tauri/target/release/bundle/`.
-
----
-
-## Viewer App (Web + Desktop)
-
-The Viewer is both a web app and a Tauri desktop app from the same codebase.
-
-### Web (development)
-
 ```bash
-# Start the directory server first, then:
-cd packages/viewer
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173`. The viewer fetches the channel list from the directory and lets you tune in.
-
-### Desktop build
-
-```bash
-cd packages/viewer
-npm run tauri build
-```
-
-Desktop-only features: mini-player (always-on-top), system tray with now-playing, favorites notifications, media key support.
-
----
-
-## Development (all together)
-
-From the repo root:
-
-```bash
-npm install          # installs root + all workspaces
-
-# Terminal 1 — directory server
-npm run directory
-
-# Terminal 2 — viewer dev server
-npm run viewer
-
-# Terminal 3 — broadcaster app
-cd packages/broadcaster && npm run tauri dev
-```
-
-Or run directory + viewer together:
-
-```bash
-npm run dev
+systemctl enable --now zender-channel
 ```
 
 ---
@@ -310,13 +177,13 @@ mode      = "relay"
 relay_url = "https://your-relay.example.com/ingest/<channel-id>/"
 ```
 
-The relay just needs to be an HTTP server that accepts PUT requests and serves files statically — nginx or Caddy with a few lines of config.
+The relay is a plain HTTP server that accepts PUT requests and serves files statically (nginx or Caddy with a few config lines).
 
 ---
 
 ## Bandwidth
 
-Every viewer streams directly from the channel server (or relay). At the default 2.5 Mbps video profile:
+Every viewer streams directly from your machine (or relay). At the default 2.5 Mbps profile:
 
 | Upload | Comfortable viewers |
 |---|---|
@@ -330,34 +197,28 @@ Radio at 128 kbps handles ~70 listeners on a modest home connection. Run the cha
 
 ## Releases
 
-Pre-built binaries for macOS (Apple Silicon), Linux, and Windows are published to [GitHub Releases](https://github.com/Hmmnd0/zender/releases) automatically when a version tag is pushed:
+Pre-built installers for macOS (Apple Silicon), Linux, and Windows are published to [GitHub Releases](https://github.com/Hmmnd0/zender/releases) when a version tag is pushed:
 
 ```bash
 git tag v0.2.0
 git push --tags
 ```
 
-GitHub Actions builds all three platforms in parallel using the workflow in `.github/workflows/release.yml`. Each release includes:
+GitHub Actions builds all three platforms in parallel. Each release includes:
 
 - **Zender** (viewer) — `.dmg` for macOS, `.AppImage` + `.deb` for Linux, `.exe` + `.msi` for Windows
-- **Zender Broadcaster** — same platforms
-
-> **Note on the Broadcaster distribution build:** The Broadcaster currently bakes the development machine's Node path and project root into the binary at compile time (`vite.config.js`). This means the "auto-launch channel server" feature in the distributed app won't work on an end-user's machine — those paths won't exist. Until the channel server is bundled as a [Tauri sidecar](https://tauri.app/develop/sidecar/), users running the distributed Broadcaster should start the channel server manually and click **Retry Connection**:
-> ```bash
-> node packages/channel-server/src/index.js /path/to/channel.toml
-> ```
-> The Viewer app has no such limitation and distributes cleanly.
+- **Zender Broadcaster** — same platforms, channel server bundled inside
 
 ---
 
 ## Building from source
 
-You need: **Node 20+**, **Rust** (via [rustup](https://rustup.rs)), **ffmpeg**, and the platform's native build tools.
+You need: **ffmpeg**, **Node 20+**, **Rust** (via [rustup](https://rustup.rs)), and your platform's native build tools.
 
 ### macOS
 
 ```bash
-xcode-select --install   # if not already installed
+xcode-select --install
 brew install ffmpeg
 
 git clone https://github.com/Hmmnd0/zender.git
@@ -369,13 +230,13 @@ cd packages/viewer
 npm run tauri build
 # → src-tauri/target/release/bundle/dmg/Zender_*.dmg
 
-# Broadcaster
+# Broadcaster (sidecar is built automatically as part of npm run build)
 cd ../broadcaster
 npm run tauri build
 # → src-tauri/target/release/bundle/dmg/Zender\ Broadcaster_*.dmg
 ```
 
-macOS will block unsigned apps with "unidentified developer." Right-click → Open to bypass, or run from Terminal:
+macOS will block unsigned apps with "unidentified developer." Right-click → Open to bypass, or:
 ```bash
 xattr -dr com.apple.quarantine /Applications/Zender.app
 ```
@@ -389,19 +250,13 @@ sudo apt-get install -y \
 git clone https://github.com/Hmmnd0/zender.git
 cd zender && npm install
 
-# Viewer
 cd packages/viewer && npm run tauri build
-# → src-tauri/target/release/bundle/appimage/zender_*.AppImage
-# → src-tauri/target/release/bundle/deb/zender_*.deb
-
-# Broadcaster
 cd ../broadcaster && npm run tauri build
-# → src-tauri/target/release/bundle/appimage/zender-broadcaster_*.AppImage
 ```
 
 ### Windows
 
-Install [Node](https://nodejs.org), [Rust](https://rustup.rs), [ffmpeg](https://ffmpeg.org/download.html) (add to PATH), and the [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (usually pre-installed on Windows 11).
+Install [Node](https://nodejs.org), [Rust](https://rustup.rs), [ffmpeg](https://ffmpeg.org/download.html) (add to PATH), and the [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
 
 ```powershell
 git clone https://github.com/Hmmnd0/zender.git
@@ -410,8 +265,6 @@ npm install
 
 cd packages\viewer
 npm run tauri build
-# → src-tauri\target\release\bundle\nsis\Zender_*-setup.exe
-# → src-tauri\target\release\bundle\msi\Zender_*.msi
 
 cd ..\broadcaster
 npm run tauri build
@@ -419,9 +272,25 @@ npm run tauri build
 
 ---
 
+## Development
+
+From the repo root:
+
+```bash
+npm install
+
+# Terminal 1 — viewer dev server
+npm run viewer
+
+# Terminal 2 — broadcaster app (launches channel server automatically in dev)
+cd packages/broadcaster && npm run tauri dev
+```
+
+---
+
 ## Legal
 
-Zender is content-neutral software. If you run a public directory server, you need a DMCA takedown policy, a contact address, and the moderation tooling (ban/report endpoints in the directory) in place before you open it to the public. The directory server code includes report and ban stubs — wire them up.
+Zender is content-neutral software. You are responsible for ensuring you have the rights to broadcast any content you put on air.
 
 ---
 

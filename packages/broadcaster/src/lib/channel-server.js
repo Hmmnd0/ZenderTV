@@ -1,9 +1,13 @@
 // Client for the local channel server control API.
-// The channel server process runs on localhost alongside the broadcaster app.
+// The channel server process runs on localhost:8047 alongside the broadcaster app.
+//
+// Dev:  Vite proxies /control → localhost:8047, so relative URLs work.
+// Prod: No proxy exists; use the full URL directly.
+const BASE   = import.meta.env.DEV ? '' : 'http://localhost:8047';
+const WS_URL = import.meta.env.DEV
+  ? `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/control/events`
+  : 'ws://localhost:8047/control/events';
 
-// Use relative URLs so requests go through Vite's proxy in dev
-// (Tauri WebKit blocks direct cross-origin fetches to different localhost ports)
-const BASE = '';
 let evtWs = null;
 const listeners = new Set();
 
@@ -15,8 +19,7 @@ export function subscribeToEvents(fn) {
 
 function ensureWs() {
   if (evtWs && evtWs.readyState <= 1) return;
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  evtWs = new WebSocket(`${proto}//${location.host}/control/events`);
+  evtWs = new WebSocket(WS_URL);
   evtWs.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);

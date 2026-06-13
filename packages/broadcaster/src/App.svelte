@@ -26,6 +26,8 @@
   let bumpers = $state([]);
   let serverPid = $state(null);
   let initialFolders = $state([]);
+  let ffmpegLogs = $state([]);
+  let startupPhase = $state(null); // null = idle, string = phase name, object = {phase, file?}
 
   onMount(async () => {
     // Try to connect to an already-running server first
@@ -42,8 +44,16 @@
         serverState = { ...DEFAULT_STATE, ...msg };
         connected = true;
         serverError = null;
+        if (msg.onAir) startupPhase = null; // stream is live — clear progress
+      } else if (msg.type === 'startup') {
+        startupPhase = { phase: msg.phase, file: msg.file ?? null };
+      } else if (msg.type === 'startup_error') {
+        startupPhase = null;
+        serverError = msg.message;
       } else if (msg.type?.startsWith('norm_')) {
         normEvents = [...normEvents.slice(-50), msg];
+      } else if (msg.type === 'ffmpeg_log') {
+        ffmpegLogs = [...ffmpegLogs.slice(-49), { level: msg.level, line: msg.line, ts: Date.now() }];
       }
     });
 
@@ -76,14 +86,22 @@
     }
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const projectRoot = import.meta.env.VITE_PROJECT_ROOT;
-      const nodeBin = import.meta.env.VITE_NODE_BIN;
-      const serverScript = `${projectRoot}/packages/channel-server/src/index.js`;
-      const configDir = configPath.substring(0, configPath.lastIndexOf('/')) || projectRoot;
-      console.log('[broadcaster] launching', nodeBin, serverScript, configPath, 'cwd:', configDir);
-      const pid = await invoke('launch_channel_server', {
-        nodeBin, script: serverScript, config: configPath, cwd: configDir,
-      });
+      let pid;
+      if (import.meta.env.DEV) {
+        // Dev: run directly via the system Node.js binary (Vite proxy handles port rewriting)
+        const projectRoot = import.meta.env.VITE_PROJECT_ROOT;
+        const nodeBin = import.meta.env.VITE_NODE_BIN;
+        const serverScript = `${projectRoot}/packages/channel-server/src/index.js`;
+        const configDir = configPath.substring(0, configPath.lastIndexOf('/')) || projectRoot;
+        console.log('[broadcaster] dev launch:', nodeBin, serverScript);
+        pid = await invoke('launch_channel_server', {
+          nodeBin, script: serverScript, config: configPath, cwd: configDir,
+        });
+      } else {
+        // Prod: use the bundled sidecar binary
+        console.log('[broadcaster] sidecar launch:', configPath);
+        pid = await invoke('launch_channel_server_sidecar', { config: configPath });
+      }
       serverPid = pid;
       console.log('[broadcaster] channel server PID:', pid);
       await new Promise(r => setTimeout(r, 2500));
@@ -96,6 +114,7 @@
   async function handleOnAirToggle() {
     serverError = null;
     if (serverState.onAir) {
+      startupPhase = null;
       try {
         const st = await setOnAir(false);
         serverState = { ...DEFAULT_STATE, ...st };
@@ -103,10 +122,12 @@
         serverError = e.message;
       }
     } else {
+      // Optimistically show startup state; actual progress arrives via WebSocket.
+      startupPhase = { phase: 'starting' };
       try {
-        const st = await setOnAir(true);
-        serverState = { ...DEFAULT_STATE, ...st };
+        await setOnAir(true); // returns immediately with { ok: true, startingUp: true }
       } catch (e) {
+        startupPhase = null;
         serverError = e.message;
       }
     }
@@ -203,6 +224,7 @@
     state={serverState}
     {channelName}
     {connected}
+    {startupPhase}
     onToggleOnAir={handleOnAirToggle}
     onStopServer={handleStopServer}
   />
@@ -238,7 +260,7 @@
       </aside>
 
       <main class="pane queue-pane">
-        <Queue state={serverState} />
+        <Queue state={serverState} logs={ffmpegLogs} />
       </main>
 
       <aside class="pane scheduler-pane">

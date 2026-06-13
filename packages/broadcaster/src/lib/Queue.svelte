@@ -1,7 +1,7 @@
 <script>
   import { skip, standby, dequeueFile } from './channel-server.js';
 
-  let { state } = $props();
+  let { state, logs = [] } = $props();
 
   function basename(p) {
     if (!p) return '';
@@ -82,6 +82,18 @@
     Use <strong>▶ Now</strong> in the library to jump to any file.<br/>
     Use <strong>+ Queue</strong> to add to the end of the line.
   </div>
+
+  {#if logs.length > 0}
+    <div class="section-header log-header">SIGNAL LOG</div>
+    <div class="log-list">
+      {#each [...logs.slice(-12)].reverse() as entry}
+        <div class="log-row log-{entry.level}">
+          <span class="log-time">{new Date(entry.ts).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+          <span class="log-line">{entry.line}</span>
+        </div>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -198,4 +210,27 @@
     border-top: 1px solid #111;
   }
   .hint strong { color: #555; }
+
+  .log-header { color: #444; }
+  .log-list {
+    max-height: 120px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    border-top: 1px solid #111;
+  }
+  .log-row {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.68rem;
+    line-height: 1.4;
+    border-bottom: 1px solid #0a0a0a;
+    color: #555;
+  }
+  .log-time { flex-shrink: 0; color: #333; }
+  .log-line { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log-error { color: #f64; }
+  .log-error .log-time { color: #a33; }
+  .log-warn  { color: #ca4; }
+  .log-warn  .log-time { color: #765; }
 </style>

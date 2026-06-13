@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node ../channel-server/scripts/build-sidecar.mjs",
     "build": "vite build",
     "tauri": "tauri dev",
     "tauri:build": "tauri build"

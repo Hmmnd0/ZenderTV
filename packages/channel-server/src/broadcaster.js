@@ -1,20 +1,21 @@
 import { spawn } from 'child_process';
-import { writeFileSync, appendFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
+import { writeFileSync, appendFileSync, mkdirSync, existsSync, readFileSync, watch } from 'fs';
 import { join } from 'path';
-import { watch } from 'chokidar';
 
 export class Broadcaster {
-  constructor(workDir, cfg, onSegment, onError) {
+  constructor(workDir, cfg, onSegment, onError, onLog) {
     this.workDir = workDir;
     this.cfg = cfg;
     this.onSegment = onSegment;
     this.onError = onError;
+    this.onLog = onLog;
     this.playlistTxt = join(workDir, 'playlist.txt');
     this.publicDir = join(workDir, 'public');
     this.ffmpeg = null;
     this.watcher = null;
     this.uptime = 0;
     this._uptimeInterval = null;
+    this._restartCount = 0;
     mkdirSync(this.publicDir, { recursive: true });
   }
 
@@ -47,15 +48,36 @@ export class Broadcaster {
     ];
 
     const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    proc.stderr.on('data', () => {});
     this.ffmpeg = proc;
+    this._restartCount++;
 
-    proc.on('exit', (code) => {
+    let stderrBuf = '';
+    proc.stderr.on('data', (chunk) => {
+      stderrBuf += chunk.toString();
+      const lines = stderrBuf.split('\n');
+      stderrBuf = lines.pop();
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t) continue;
+        const isError = /error|invalid|fail|corrupt|abort/i.test(t) && !/^ffmpeg version/i.test(t);
+        const isWarn  = /warning|discontinuity|mismatch|non monotonous/i.test(t);
+        if (isError || isWarn) {
+          const level = isError ? 'error' : 'warn';
+          console.error(`[ffmpeg][${level}] ${t}`);
+          this.onLog?.({ level, line: t });
+        }
+      }
+    });
+
+    proc.on('exit', (code, signal) => {
       // If a newer process is already running, this exit is from a killed-and-replaced
       // process — ignore it entirely so we don't wipe the current reference or trigger
       // a spurious auto-restart.
       if (this.ffmpeg !== proc) return;
       this.ffmpeg = null;
+      const msg = signal ? `killed by ${signal}` : `exit code ${code}`;
+      console.log(`[ffmpeg] process ended (${msg}), restarts so far: ${this._restartCount}`);
+      this.onLog?.({ level: 'info', line: `ffmpeg ended — ${msg}` });
       if (code !== 0 && code !== null) {
         this.onError?.(new Error(`ffmpeg exited with code ${code}`));
       }
@@ -87,9 +109,15 @@ export class Broadcaster {
   }
 
   _watchSegments() {
-    this.watcher = watch(this.publicDir, { ignoreInitial: true });
-    this.watcher.on('add', (path) => {
-      if (path.endsWith('.ts')) this.onSegment?.(path);
+    let lastSeen = null;
+    this.watcher = watch(this.publicDir, (event, filename) => {
+      if (event === 'rename' && filename?.endsWith('.ts') && filename !== lastSeen) {
+        const fullPath = join(this.publicDir, filename);
+        if (existsSync(fullPath)) {
+          lastSeen = filename;
+          this.onSegment?.(fullPath);
+        }
+      }
     });
   }
 

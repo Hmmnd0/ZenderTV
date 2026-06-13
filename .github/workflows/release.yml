@@ -28,7 +28,7 @@ jobs:
               repo: context.repo.repo,
               tag_name: tag,
               name: `Zender ${tag}`,
-              body: `## What's new\n\n_Fill this in before publishing._\n\n---\n\n**Viewer** — the audience app (guide + player). Works on all platforms.\n\n**Broadcaster** — the source client. See the README for channel-server setup notes.`,
+              body: `## What's new\n\n_Fill this in before publishing._\n\n---\n\n**Zender** — the viewer app. Download and start watching channels.\n\n**Zender Broadcaster** — the source app. Open or create a channel, add your media, hit ON AIR.`,
               draft: true,
               prerelease: false,
             });
@@ -44,11 +44,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS — ARM64 (Apple Silicon M1/M2/M3)
-          # Intel Macs can run this via Rosetta 2.
-          # To add a native Intel build, duplicate this entry with:
-          #   platform: macos-13
-          #   args: --target x86_64-apple-darwin
+          # macOS — ARM64 (Apple Silicon). Intel Macs run this via Rosetta 2.
           - platform: macos-latest
             args: --target aarch64-apple-darwin
             rust_target: aarch64-apple-darwin
@@ -86,7 +82,6 @@ jobs:
             packages/broadcaster/src-tauri
             packages/viewer/src-tauri
 
-      # Linux needs GTK + WebKit system libraries
       - name: Install Linux system dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -97,13 +92,10 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      # Install all workspace deps from the root
       - name: Install npm dependencies
         run: npm ci
 
       # ── Viewer ────────────────────────────────────────────────────────────
-      # The viewer is a clean distribution build — fetches the channel guide
-      # from a directory server and plays HLS streams. No local path deps.
       - name: Build Viewer
         uses: tauri-apps/tauri-action@v0
         env:
@@ -114,18 +106,11 @@ jobs:
           args: ${{ matrix.args }}
 
       # ── Broadcaster ───────────────────────────────────────────────────────
-      # NOTE: The Broadcaster bakes VITE_PROJECT_ROOT and VITE_NODE_BIN as
-      # absolute paths at build time (packages/broadcaster/vite.config.js).
-      # The built app's "launch channel server" feature will NOT work on an
-      # end-user's machine because those paths won't exist there.
-      #
-      # Until the channel server is bundled as a Tauri sidecar resource, the
-      # distributed Broadcaster is useful for the UI but users need to run
-      # the channel server manually:
-      #   node packages/channel-server/src/index.js channel.toml
-      # then point the Broadcaster at it via "Retry Connection".
-      #
-      # We still publish the build so users can try it without compiling Rust.
+      # The channel server is compiled to a self-contained binary (sidecar)
+      # and bundled inside the installer. End users need nothing else installed.
+      - name: Build channel-server sidecar
+        run: node packages/channel-server/scripts/build-sidecar.mjs
+
       - name: Build Broadcaster
         uses: tauri-apps/tauri-action@v0
         env:

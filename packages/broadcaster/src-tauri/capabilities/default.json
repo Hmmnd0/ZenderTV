@@ -20,13 +20,15 @@
     {
       "identifier": "shell:allow-spawn",
       "allow": [
-        { "name": "node", "cmd": "node", "args": true, "sidecar": false }
+        { "name": "node", "cmd": "node", "args": true, "sidecar": false },
+        { "name": "channel-server", "sidecar": true, "args": true }
       ]
     },
     {
       "identifier": "shell:allow-execute",
       "allow": [
-        { "name": "node", "cmd": "node", "args": true, "sidecar": false }
+        { "name": "node", "cmd": "node", "args": true, "sidecar": false },
+        { "name": "channel-server", "sidecar": true, "args": true }
       ]
     }
   ]

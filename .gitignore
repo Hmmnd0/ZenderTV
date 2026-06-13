@@ -14,6 +14,10 @@ dist/
 # Tauri build output
 packages/*/src-tauri/target/
 
+# Compiled sidecar binaries — built per-platform by npm run build:sidecar / CI
+packages/broadcaster/src-tauri/binaries/
+packages/channel-server/dist/
+
 # HLS segments and cache (live in ~/Movies/Zender/ at runtime)
 public/
 cache/

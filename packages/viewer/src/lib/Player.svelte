@@ -74,10 +74,6 @@
     localStorage.setItem('zender_volume', String(volume));
   });
 
-  onMount(() => {
-    if (channel && videoEl) attach(channel.stream_url);
-  });
-
   async function handleStar() {
     const next = await toggleFavorite(channel);
     starred = next.some(f => f.id === channel.id);
