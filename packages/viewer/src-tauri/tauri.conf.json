@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Zender",
+  "productName": "ZenderTV",
   "version": "0.1.0",
-  "identifier": "com.zender.viewer",
+  "identifier": "com.zendertv.viewer",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5174",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Zender",
+        "title": "ZenderTV",
         "width": 1280,
         "height": 800,
         "minWidth": 800,
@@ -22,7 +22,7 @@
       },
       {
         "label": "miniplayer",
-        "title": "Zender",
+        "title": "ZenderTV",
         "width": 360,
         "height": 72,
         "minWidth": 280,

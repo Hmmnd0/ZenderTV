@@ -37,10 +37,19 @@ export class RelayUploader {
     }
   }
 
-  async deleteSegment(segPath) {
-    const name = basename(segPath);
+  async uploadThumb(thumbPath) {
+    if (!existsSync(thumbPath)) return;
     try {
-      await fetch(this.relayUrl + name, {
+      const body = readFileSync(thumbPath);
+      await this._put('thumb.jpg', body, 'image/jpeg');
+    } catch (e) {
+      console.error(`[relay] thumb upload failed: ${e.message}`);
+    }
+  }
+
+  async deregister() {
+    try {
+      await fetch(this.relayUrl, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${this.secret}` },
       });

@@ -81,7 +81,7 @@
 </script>
 
 <svelte:head>
-  <title>{activeIdx !== null ? channels[activeIdx]?.name + ' — Zender' : 'Zender'}</title>
+  <title>{activeIdx !== null ? channels[activeIdx]?.name + ' — ZenderTV' : 'ZenderTV'}</title>
 </svelte:head>
 
 {#if activeIdx !== null && channels[activeIdx]}

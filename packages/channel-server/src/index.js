@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { join, resolve } from 'path';
 import { mkdirSync, existsSync, readdirSync, unlinkSync, readFileSync, statSync } from 'fs';
+import { spawn } from 'child_process';
 import { homedir } from 'os';
 import { loadConfig } from './config.js';
 import { Scheduler } from './scheduler.js';
@@ -17,11 +18,11 @@ import { ensureNormalized, generateStandby, isAudioFile, isMediaFile } from './n
 const configPath = process.argv[2] ?? 'channel.toml';
 const cfg = loadConfig(configPath);
 
-// Operational files (cache, segments, playlist) live in ~/Movies/Zender/<channel>/
+// Operational files (cache, segments, playlist) live in ~/Movies/ZenderTV/<channel>/
 // so they never clutter the user's media folder.
 const safeName = cfg.channel.name.replace(/[^a-z0-9_-]/gi, '_').slice(0, 64) || 'channel';
 const mediaFolder = process.platform === 'darwin' ? 'Movies' : 'Videos';
-const workDir = join(homedir(), mediaFolder, 'Zender', safeName);
+const workDir = join(homedir(), mediaFolder, 'ZenderTV', safeName);
 const cacheDir = join(workDir, 'cache');
 const publicDir = join(workDir, 'public');
 mkdirSync(cacheDir, { recursive: true });
@@ -37,6 +38,7 @@ let upcomingQueue = [];
 let broadcaster = null;
 let feeder = null;
 let relay = null;
+let standbyTimer = null;
 let _restarting = false;
 
 // --- Normalize queue ---
@@ -90,7 +92,7 @@ function getState() {
   return {
     type: 'state',
     onAir,
-    nowPlaying,
+    nowPlaying: onAir ? nowPlaying : null,
     upcomingQueue,
     pendingQueue: scheduler.manualQueue.map(f => ({
       path: f,
@@ -133,15 +135,23 @@ async function _goOnAir() {
     existsSync(standbySrc) ? Promise.resolve() : generateStandby(standbySrc, cfg.stream).catch(e => console.error('[standby] gen failed:', e.message)),
   ]);
 
-  if (cfg.server.mode === 'relay' && cfg.server.relayUrl) {
-    relay = new RelayUploader(cfg.server.relayUrl, null);
-  }
-
   broadcastStartup('starting_stream');
+  let segsSinceThumb = 0;
   broadcaster = new Broadcaster(workDir, cfg, async (segPath) => {
     if (relay) {
       await relay.uploadSegment(segPath);
       await relay.uploadPlaylist(join(publicDir, 'live.m3u8'));
+      // Grab a thumbnail every 6 segments (~30s) directly from the segment file.
+      // Using segPath avoids parsing the m3u8 and guarantees the file exists.
+      if (++segsSinceThumb >= 6) {
+        segsSinceThumb = 0;
+        const thumbPath = join(publicDir, 'thumb.jpg');
+        const proc = spawn('ffmpeg', ['-ss', '1', '-i', segPath, '-vframes', '1', '-q:v', '5', '-y', thumbPath]);
+        proc.on('exit', (code) => {
+          if (code === 0) relay?.uploadThumb(thumbPath);
+          else console.error(`[thumb] ffmpeg grab failed (code ${code})`);
+        });
+      }
     }
     broadcast({ type: 'segment' });
   }, (err) => {
@@ -188,14 +198,14 @@ async function _goOnAir() {
   await feeder.start(firstSrc, firstNorm);
 
   onAir = true;
-  setInterval(() => broadcaster?.grabThumb(), 30_000);
 
   if (cfg.directory.public) {
-    const streamUrl = cfg.server.mode === 'relay' ? relayPublicUrl() : localPublicUrl();
-    const thumbUrl = streamUrl.replace('live.m3u8', 'thumb.jpg');
+    const isRelay = cfg.server.mode === 'relay' && cfg.server.relayBaseUrl;
+    // Register with local URL first (relay URL needs the channel-id we get from registration)
+    const initStreamUrl = localPublicUrl();
+    const initThumbUrl = initStreamUrl.replace('live.m3u8', 'thumb.jpg');
     try {
       // Wait up to 30 s for the first HLS playlist to appear before registering.
-      // ffmpeg needs at least one segment duration before live.m3u8 is written.
       broadcastStartup('waiting_stream');
       await (async () => {
         const m3u8 = join(publicDir, 'live.m3u8');
@@ -205,8 +215,17 @@ async function _goOnAir() {
         }
       })();
       broadcastStartup('registering');
-      const { secret } = await directory.register(streamUrl, thumbUrl, cfg.server.mode === 'relay');
-      if (relay) relay.secret = secret;
+      const { id, secret } = await directory.register(initStreamUrl, initThumbUrl, isRelay);
+
+      if (isRelay) {
+        const base = cfg.server.relayBaseUrl.replace(/\/$/, '');
+        relay = new RelayUploader(`${base}/ingest/${id}/`, secret);
+        await directory.updateUrls({
+          streamUrl: `${base}/ch/${id}/live.m3u8`,
+          thumbUrl:  `${base}/ch/${id}/thumb.jpg`,
+        });
+      }
+
       directory.startHeartbeat(
         () => nowPlaying,
         () => viewers.count(),
@@ -225,16 +244,21 @@ async function _goOnAir() {
 
 async function goOffAir() {
   if (!onAir) return;
+  // Clear flags immediately so any in-flight async callbacks (error handler,
+  // tick interval, relay deregister) see the correct stopped state.
+  onAir = false;
+  nowPlaying = null;
+  upcomingQueue = [];
+  clearInterval(standbyTimer);
+  standbyTimer = null;
   feeder?.stop();
   feeder = null;
   broadcaster?.stop();
   broadcaster = null;
-  relay = null;
-  onAir = false;
-  nowPlaying = null;
-  upcomingQueue = [];
-  await directory.deregister();
   broadcast(getState());
+  await relay?.deregister().catch(() => {});
+  relay = null;
+  await directory.deregister();
 }
 
 function localPublicUrl() {
@@ -243,8 +267,9 @@ function localPublicUrl() {
 }
 
 function relayPublicUrl() {
-  if (!cfg.server.relayUrl) return localPublicUrl();
-  return cfg.server.relayUrl.replace('/ingest/', '/ch/') + 'live.m3u8';
+  if (!cfg.server.relayBaseUrl) return localPublicUrl();
+  // Only valid after directory registration (relay needs the channel-id)
+  return relay ? relay.relayUrl.replace('/ingest/', '/ch/') + 'live.m3u8' : localPublicUrl();
 }
 
 // --- HTTP server ---
@@ -418,11 +443,15 @@ app.post('/control/standby', async (req, res) => {
   broadcaster.skip();
   broadcaster.restartFrom(standbySrc);
   nowPlaying = 'STANDBY';
+  // standby.ts is only 10s — keep re-queuing it so ffmpeg never runs out of content
+  standbyTimer = setInterval(() => broadcaster?.enqueue(standbySrc), 8_000);
   broadcast(getState());
   res.json({ ok: true });
 });
 
 app.post('/control/resume', async (req, res) => {
+  clearInterval(standbyTimer);
+  standbyTimer = null;
   if (!broadcaster) return res.status(400).json({ error: 'not on air' });
   const next = scheduler.next(null);
   if (!next) return res.status(400).json({ error: 'nothing in scheduler' });
@@ -510,15 +539,11 @@ app.post('/control/shutdown', async (_req, res) => {
   setTimeout(() => process.exit(0), 200);
 });
 
-// Update relay URL at runtime (called after directory registration returns the relay endpoint)
+// Update relay base URL at runtime
 app.post('/control/relay-url', (req, res) => {
-  const { relayUrl, secret } = req.body;
+  const { relayUrl } = req.body;
   if (!relayUrl) return res.status(400).json({ error: 'relayUrl required' });
-  cfg.server.relayUrl = relayUrl;
-  if (relay) {
-    relay.relayUrl = relayUrl.endsWith('/') ? relayUrl : relayUrl + '/';
-    if (secret) relay.secret = secret;
-  }
+  cfg.server.relayBaseUrl = relayUrl;
   res.json({ ok: true });
 });
 

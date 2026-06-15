@@ -55,6 +55,19 @@ export class DirectoryClient {
     this._heartbeatTimer = null;
   }
 
+  async updateUrls({ streamUrl, thumbUrl } = {}) {
+    if (!this.id) return;
+    try {
+      await fetch(`${this.url}/api/channels/${this.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.secret}` },
+        body: JSON.stringify({ stream_url: streamUrl, thumb_url: thumbUrl }),
+      });
+    } catch (e) {
+      console.error(`[directory] url update failed: ${e.message}`);
+    }
+  }
+
   async deregister() {
     this.stopHeartbeat();
     if (!this.id) return;

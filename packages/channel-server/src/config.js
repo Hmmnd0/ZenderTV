@@ -33,7 +33,7 @@ export function loadConfig(path) {
       port: cfg.server?.port ?? 8047,
       publicUrl: cfg.server?.public_url ?? '',
       mode: cfg.server?.mode ?? 'relay',
-      relayUrl: cfg.server?.relay_url ?? '',
+      relayBaseUrl: cfg.server?.relay_url ?? '',
     },
   };
 }

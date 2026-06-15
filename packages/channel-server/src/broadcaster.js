@@ -78,9 +78,7 @@ export class Broadcaster {
       const msg = signal ? `killed by ${signal}` : `exit code ${code}`;
       console.log(`[ffmpeg] process ended (${msg}), restarts so far: ${this._restartCount}`);
       this.onLog?.({ level: 'info', line: `ffmpeg ended — ${msg}` });
-      if (code !== 0 && code !== null) {
-        this.onError?.(new Error(`ffmpeg exited with code ${code}`));
-      }
+      this.onError?.(new Error(`ffmpeg exited: ${msg}`));
     });
   }
 

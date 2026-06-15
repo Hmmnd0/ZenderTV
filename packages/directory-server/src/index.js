@@ -26,6 +26,7 @@ db.exec(`
     thumb_url   TEXT,
     now_playing TEXT,
     viewers     INTEGER DEFAULT 0,
+    verified    INTEGER DEFAULT 0,
     masked      INTEGER DEFAULT 1,
     flagged     INTEGER DEFAULT 0,
     banned      INTEGER DEFAULT 0,
@@ -59,6 +60,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_channels_type ON channels(type);
   CREATE INDEX IF NOT EXISTS idx_channels_genre ON channels(genre);
 `);
+
+// Migrate: add verified column to existing DBs
+try { db.exec('ALTER TABLE channels ADD COLUMN verified INTEGER DEFAULT 0'); } catch {};
 
 const HEARTBEAT_TTL = 90;
 
@@ -106,6 +110,7 @@ function channelFromRow(row) {
     thumb_url: row.thumb_url,
     now_playing: row.now_playing,
     viewers: row.viewers,
+    verified: row.verified === 1,
     masked: row.masked === 1,
   };
 }
@@ -139,23 +144,25 @@ app.post('/api/register', registerLimit, async (req, res) => {
     return res.status(400).json({ error: 'type must be tv or radio' });
   }
 
-  const ok = await verifyStream(stream_url);
-  if (!ok) {
-    return res.status(400).json({ error: 'stream_url is not a reachable HLS playlist' });
-  }
-
   const id = uuidv4();
   const secret = uuidv4();
   const now = Math.floor(Date.now() / 1000);
 
   db.prepare(`
     INSERT INTO channels (id, secret, name, description, genre, type, stream_url,
-      thumb_url, masked, reg_ip, last_seen, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      thumb_url, verified, masked, reg_ip, last_seen, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, secret, name, description ?? null, genre ?? null, type,
-    stream_url, thumb_url ?? null, masked === false ? 0 : 1, ip, now, now);
+    stream_url, thumb_url ?? null, 0, masked === false ? 0 : 1, ip, now, now);
 
   res.status(201).json({ id, secret });
+
+  // Verify the stream in the background after a short delay (stream may not be ready instantly)
+  setTimeout(() => {
+    verifyStream(stream_url).then(ok => {
+      if (ok) db.prepare('UPDATE channels SET verified = 1 WHERE id = ?').run(id);
+    }).catch(() => {});
+  }, 15_000);
 });
 
 // POST /api/heartbeat
@@ -166,7 +173,7 @@ app.post('/api/heartbeat', (req, res) => {
   const { id, now_playing, viewers, epg } = req.body;
   if (!id) return res.status(400).json({ error: 'id required' });
 
-  const channel = db.prepare('SELECT id, secret, banned FROM channels WHERE id = ?').get(id);
+  const channel = db.prepare('SELECT id, secret, banned, verified FROM channels WHERE id = ?').get(id);
   if (!channel || channel.secret !== secret) return res.status(403).json({ error: 'Forbidden' });
   if (channel.banned) return res.status(403).json({ error: 'Channel banned' });
 
@@ -175,6 +182,14 @@ app.post('/api/heartbeat', (req, res) => {
     UPDATE channels SET last_seen = ?, now_playing = ?, viewers = ?
     WHERE id = ?
   `).run(now, now_playing ?? null, viewers ?? 0, id);
+
+  // Background re-verify for channels that haven't been confirmed yet
+  if (!channel.verified) {
+    const { stream_url } = db.prepare('SELECT stream_url FROM channels WHERE id = ?').get(id);
+    verifyStream(stream_url).then(ok => {
+      if (ok) db.prepare('UPDATE channels SET verified = 1 WHERE id = ?').run(id);
+    }).catch(() => {});
+  }
 
   if (epg) {
     db.prepare(`
@@ -226,6 +241,18 @@ app.delete('/api/channels/:id', (req, res) => {
 
   db.prepare('DELETE FROM channels WHERE id = ?').run(req.params.id);
   db.prepare('DELETE FROM relay_tokens WHERE channel_id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// PATCH /api/channels/:id — channel updates its own metadata (e.g. stream_url after relay setup)
+app.patch('/api/channels/:id', (req, res) => {
+  const secret = requireBearer(req, res);
+  if (!secret) return;
+  const channel = db.prepare('SELECT secret FROM channels WHERE id = ?').get(req.params.id);
+  if (!channel || channel.secret !== secret) return res.status(403).json({ error: 'Forbidden' });
+  const { stream_url, thumb_url } = req.body;
+  if (stream_url) db.prepare('UPDATE channels SET stream_url = ? WHERE id = ?').run(stream_url, req.params.id);
+  if (thumb_url) db.prepare('UPDATE channels SET thumb_url = ? WHERE id = ?').run(thumb_url, req.params.id);
   res.json({ ok: true });
 });
 

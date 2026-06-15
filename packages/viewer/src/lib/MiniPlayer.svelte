@@ -69,7 +69,7 @@
   <!-- Drag region — the rest of the window is drag-only -->
   <div class="drag-region" data-tauri-drag-region>
     <div class="channel-name" data-tauri-drag-region>
-      {channel?.name ?? 'Zender'}
+      {channel?.name ?? 'ZenderTV'}
     </div>
     <div class="now-playing" data-tauri-drag-region>
       {#if channel?.now_playing}

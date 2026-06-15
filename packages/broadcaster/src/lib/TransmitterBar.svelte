@@ -1,5 +1,5 @@
 <script>
-  let { state, onToggleOnAir, onStopServer, channelName, connected = false, startupPhase = null } = $props();
+  let { state, onToggleOnAir, onStopServer, onEditInfo, channelName, connected = false, startupPhase = null, playNowEncoding = null } = $props();
   import { formatUptime } from './channel-server.js';
 
   const isStartingUp = $derived(!!startupPhase && !state.onAir);
@@ -40,6 +40,8 @@
     <span class="channel-name">{channelName ?? 'Unnamed Channel'}</span>
     {#if isStartingUp && phaseLabel}
       <span class="phase-label">{phaseLabel}</span>
+    {:else if playNowEncoding}
+      <span class="phase-label encoding">⟳ Encoding {playNowEncoding.split('/').pop()?.replace(/\.\w{2,4}$/, '') ?? ''}…</span>
     {/if}
   </div>
 
@@ -52,6 +54,7 @@
   {/if}
 
   {#if connected}
+    <button class="info-btn" onclick={onEditInfo} title="Edit channel info">✎ INFO</button>
     <button class="stop-btn" onclick={onStopServer} title="Stop channel server">■ STOP</button>
   {/if}
 
@@ -164,6 +167,8 @@
     max-width: 260px;
   }
 
+  .phase-label.encoding { color: #4a8; }
+
   .viewers, .uptime { color: #777; }
 
   .mode-badge {
@@ -175,8 +180,22 @@
   .mode-direct { color: #fa4; border-color: #fa44; }
   .mode-tunnel { color: #4f4; border-color: #4f44; }
 
-  .stop-btn {
+  .info-btn {
     margin-left: auto;
+    background: none;
+    border: 1px solid #2a2a2a;
+    color: #666;
+    padding: 0.2rem 0.6rem;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .info-btn:hover { border-color: #555; color: #aaa; }
+
+  .stop-btn {
+    margin-left: 0;
     background: none;
     border: 1px solid #4a2222;
     color: #844;

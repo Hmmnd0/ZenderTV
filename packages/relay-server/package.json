@@ -1,5 +1,5 @@
 {
-  "name": "@zendertv/directory-server",
+  "name": "@zendertv/relay-server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,9 +9,6 @@
     "dev": "node --watch src/index.js"
   },
   "dependencies": {
-    "better-sqlite3": "^11.7.0",
-    "express": "^4.21.2",
-    "express-rate-limit": "^7.5.0",
-    "uuid": "^11.1.0"
+    "express": "^4.21.2"
   }
 }

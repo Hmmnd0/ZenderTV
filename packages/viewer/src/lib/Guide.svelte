@@ -37,7 +37,7 @@
 
 <div class="guide">
   <header class="guide-header">
-    <h1>Zender</h1>
+    <h1>ZenderTV</h1>
     <div class="filters">
       <button class:active={filter === 'all'} onclick={() => filter = 'all'}>All</button>
       <button class:active={filter === 'tv'} onclick={() => filter = 'tv'}>TV</button>
@@ -69,7 +69,8 @@
         <div class="card" onclick={() => onTune(ch)} role="button" tabindex="0">
           <div class="thumb-wrap">
             {#if ch.thumb_url}
-              <img src={ch.thumb_url} alt="" loading="lazy" />
+              <img src={ch.thumb_url} alt="" loading="lazy"
+                onerror={(e) => { const img = e.currentTarget; setTimeout(() => { img.src = ch.thumb_url + '?t=' + Date.now(); }, 15_000); }} />
             {:else}
               <div class="no-thumb">{ch.type === 'radio' ? 'RADIO' : 'TV'}</div>
             {/if}

@@ -114,7 +114,7 @@ export class QueueFeeder {
           // Nothing scheduled — loop the last item so ffmpeg never exhausts the
           // playlist and exits. Real content will displace the loop on next _fill.
           const last = this._items.at(-1);
-          if (last && !last.isLoop) {
+          if (last) {
             const startSec = this._totalQueued;
             this._items.push({ src: last.src, norm: last.norm, duration: last.duration, startSec, isLoop: true });
             this._totalQueued += last.duration;

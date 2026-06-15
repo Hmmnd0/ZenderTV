@@ -259,9 +259,9 @@
           </label>
           {#if privacyMode === 'relay'}
             <div class="field relay-url-field">
-              <label for="relay-url">Relay ingest URL</label>
-              <input id="relay-url" bind:value={relayUrl} placeholder="https://your-relay.com/ingest/channel-id/" />
-              <span class="field-hint">Leave blank to configure later in the Scheduler panel.</span>
+              <label for="relay-url">Relay server URL</label>
+              <input id="relay-url" bind:value={relayUrl} placeholder="https://zender-relay.fly.dev" />
+              <span class="field-hint">Base URL of your relay server. Leave blank to configure later.</span>
             </div>
           {/if}
           <label class="privacy-opt" class:selected={privacyMode === 'direct'}>

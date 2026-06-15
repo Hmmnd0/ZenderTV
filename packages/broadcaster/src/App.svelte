@@ -6,6 +6,7 @@
   import SchedulerPanel from './lib/SchedulerPanel.svelte';
   import ChannelWizard from './lib/ChannelWizard.svelte';
   import ConnectivityCheck from './lib/ConnectivityCheck.svelte';
+  import ChannelInfoModal from './lib/ChannelInfoModal.svelte';
   import { getState, fetchConfig, setOnAir, subscribeToEvents, shutdownServer } from './lib/channel-server.js';
 
   const DEFAULT_STATE = { onAir: false, nowPlaying: null, upcomingQueue: [], viewers: 0, uptime: 0, mode: 'relay' };
@@ -20,24 +21,26 @@
 
   let showWizard = $state(false);
   let showConnectivity = $state(false);
+  let showChannelInfo = $state(false);
   let serverError = $state(null);
 
   let bumpers = $state([]);
+  let playNowEncoding = $state(null);
   let serverPid = $state(null);
   let initialFolders = $state([]);
   let ffmpegLogs = $state([]);
   let startupPhase = $state(null); // null = idle, string = phase name, object = {phase, file?}
   let channelConfig = $state(null);
   let configPath = $state(null);
+  let lastTomlPath = $state(null);
 
   onMount(async () => {
     // Try to connect to an already-running server first
     await tryConnect();
 
-    // If nothing's running, relaunch the last-used channel automatically
+    // Surface the last-used channel so the user can resume it deliberately
     if (!connected && isTauri) {
-      const lastPath = localStorage.getItem('zender_last_toml');
-      if (lastPath) await loadChannelFromToml(lastPath).catch(() => {});
+      lastTomlPath = localStorage.getItem('zender_last_toml');
     }
 
     const unsub = subscribeToEvents((msg) => {
@@ -66,6 +69,7 @@
     try {
       serverState = await getState();
       connected = true;
+      lastTomlPath = null;
       channelConfig = await fetchConfig().catch(() => null);
     } catch {
       connected = false;
@@ -205,11 +209,25 @@
   function handleSchedulerSave(updatedConfig) {
     channelConfig = updatedConfig;
   }
+
+  function handleChannelInfoSave(updatedConfig) {
+    channelConfig = updatedConfig;
+    if (updatedConfig.channel?.name) channelName = updatedConfig.channel.name;
+  }
 </script>
 
 <div class="app">
   {#if showWizard}
     <ChannelWizard onDone={handleWizardDone} onCancel={() => { showWizard = false; }} />
+  {/if}
+
+  {#if showChannelInfo}
+    <ChannelInfoModal
+      config={channelConfig}
+      {configPath}
+      onSave={handleChannelInfoSave}
+      onClose={() => { showChannelInfo = false; }}
+    />
   {/if}
 
   {#if showConnectivity}
@@ -228,6 +246,8 @@
     {startupPhase}
     onToggleOnAir={handleOnAirToggle}
     onStopServer={handleStopServer}
+    onEditInfo={() => { showChannelInfo = true; }}
+    {playNowEncoding}
   />
 
   {#if !connected}
@@ -236,7 +256,12 @@
         Channel server not running.
       </div>
       <div class="no-server-actions">
-        <button class="btn-primary" onclick={() => { showWizard = true; }}>
+        {#if lastTomlPath}
+          <button class="btn-primary" onclick={() => loadChannelFromToml(lastTomlPath)}>
+            ▶ Resume {lastTomlPath.split('/').pop()?.replace(/\.toml$/i, '') ?? 'Last Channel'}
+          </button>
+        {/if}
+        <button class={lastTomlPath ? 'btn-secondary' : 'btn-primary'} onclick={() => { showWizard = true; }}>
           + Create New Channel
         </button>
         <button class="btn-secondary" onclick={openExistingChannel}>
@@ -257,7 +282,7 @@
   {:else}
     <div class="workspace">
       <aside class="pane library-pane">
-        <Library {normEvents} {connected} {initialFolders} onBumpersChange={(list) => { bumpers = list; }} />
+        <Library {normEvents} {connected} {initialFolders} onBumpersChange={(list) => { bumpers = list; }} onPlayNowPending={(f) => { playNowEncoding = f; }} />
       </aside>
 
       <main class="pane queue-pane">

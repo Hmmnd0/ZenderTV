@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import { normalizeFile, enqueueFile, playNow } from './channel-server.js';
 
-  let { normEvents = [], onBumpersChange, connected = false, initialFolders = [] } = $props();
+  let { normEvents = [], onBumpersChange, onPlayNowPending, connected = false, initialFolders = [] } = $props();
 
   let folders = $state([]);
   let folderFiles = $state({});
@@ -113,6 +113,7 @@
     if (playNowPending) return; // ignore double-clicks while switching
     playNowError = null;
     playNowPending = path;
+    onPlayNowPending?.(path);
     try {
       await playNow(path);
     } catch (e) {
@@ -120,6 +121,7 @@
       setTimeout(() => { playNowError = null; }, 4000);
     } finally {
       playNowPending = null;
+      onPlayNowPending?.(null);
     }
   }
 

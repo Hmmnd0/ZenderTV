@@ -35,7 +35,7 @@ export function watchFavorites(getChannels, getFavs, intervalMs = 60_000) {
     for (const ch of channels) {
       if (favIds.has(ch.id) && !seenOnAir.has(ch.id)) {
         seenOnAir.add(ch.id);
-        sendNotification('Zender', `${ch.name} is now on air`);
+        sendNotification('ZenderTV', `${ch.name} is now on air`);
       }
       if (!favIds.has(ch.id)) seenOnAir.delete(ch.id);
     }
