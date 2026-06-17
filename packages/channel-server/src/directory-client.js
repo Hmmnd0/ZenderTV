@@ -9,9 +9,11 @@ export class DirectoryClient {
 
   async register(streamUrl, thumbUrl, masked = true) {
     const { name, description, genre, type } = this.channelCfg;
+    const headers = { 'Content-Type': 'application/json' };
+    if (this.secret) headers['Authorization'] = `Bearer ${this.secret}`;
     const res = await fetch(`${this.url}/api/register`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ name, description, genre, type, stream_url: streamUrl, thumb_url: thumbUrl, masked }),
     });
     if (!res.ok) {

@@ -148,13 +148,20 @@ app.post('/api/register', registerLimit, async (req, res) => {
   const secret = uuidv4();
   const now = Math.floor(Date.now() / 1000);
 
-  // Remove any stale registration with the same name from the same IP so a
-  // restart never produces a duplicate in the guide.
-  const stale = db.prepare('SELECT id FROM channels WHERE name = ? AND reg_ip = ?').get(name, ip);
-  if (stale) {
-    db.prepare('DELETE FROM relay_tokens WHERE channel_id = ?').run(stale.id);
-    db.prepare('DELETE FROM channel_epg WHERE channel_id = ?').run(stale.id);
-    db.prepare('DELETE FROM channels WHERE id = ?').run(stale.id);
+  // If a channel with the same name already exists from this IP, only allow
+  // replacement if it has expired (missed heartbeats) or the caller proves
+  // ownership by supplying the old secret.
+  const existing = db.prepare('SELECT id, secret, last_seen FROM channels WHERE name = ? AND reg_ip = ?').get(name, ip);
+  if (existing) {
+    const cutoff = Math.floor(Date.now() / 1000) - HEARTBEAT_TTL;
+    const isExpired = existing.last_seen <= cutoff;
+    const oldSecret = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null;
+    if (!isExpired && oldSecret !== existing.secret) {
+      return res.status(409).json({ error: 'Channel name already active from this IP. Supply the old secret to replace it.' });
+    }
+    db.prepare('DELETE FROM relay_tokens WHERE channel_id = ?').run(existing.id);
+    db.prepare('DELETE FROM channel_epg WHERE channel_id = ?').run(existing.id);
+    db.prepare('DELETE FROM channels WHERE id = ?').run(existing.id);
   }
 
   db.prepare(`
