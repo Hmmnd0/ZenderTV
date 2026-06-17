@@ -141,17 +141,16 @@ async function _goOnAir() {
     if (relay) {
       await relay.uploadSegment(segPath);
       await relay.uploadPlaylist(join(publicDir, 'live.m3u8'));
-      // Grab a thumbnail every 6 segments (~30s) directly from the segment file.
-      // Using segPath avoids parsing the m3u8 and guarantees the file exists.
-      if (++segsSinceThumb >= 6) {
-        segsSinceThumb = 0;
-        const thumbPath = join(publicDir, 'thumb.jpg');
-        const proc = spawn('ffmpeg', ['-ss', '1', '-i', segPath, '-vframes', '1', '-q:v', '5', '-y', thumbPath]);
-        proc.on('exit', (code) => {
-          if (code === 0) relay?.uploadThumb(thumbPath);
-          else console.error(`[thumb] ffmpeg grab failed (code ${code})`);
-        });
-      }
+    }
+    // Grab a thumbnail every 6 segments (~30s) regardless of relay mode.
+    if (++segsSinceThumb >= 6) {
+      segsSinceThumb = 0;
+      const thumbPath = join(publicDir, 'thumb.jpg');
+      const proc = spawn('ffmpeg', ['-i', segPath, '-vframes', '1', '-q:v', '5', '-y', thumbPath]);
+      proc.on('exit', (code) => {
+        if (code === 0) relay?.uploadThumb(thumbPath);
+        else console.error(`[thumb] ffmpeg grab failed (code ${code})`);
+      });
     }
     broadcast({ type: 'segment' });
   }, (err) => {
@@ -462,6 +461,7 @@ app.post('/control/resume', async (req, res) => {
   broadcaster.restartFrom(norm);
   nowPlaying = next.split('/').pop()?.replace(/(\.\w{2,4})?\.norm\.ts$/, '').replace(/\.\w{2,4}$/, '') ?? next;
   broadcast(getState());
+  directory.flushHeartbeat();
 
   res.json(getState());
 

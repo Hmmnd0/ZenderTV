@@ -5044,7 +5044,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "zender-viewer"
+name = "zendertv-viewer"
 version = "0.1.0"
 dependencies = [
  "serde",

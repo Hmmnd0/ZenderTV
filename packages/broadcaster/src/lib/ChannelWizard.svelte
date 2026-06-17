@@ -22,7 +22,7 @@
 
   // Step 4: Privacy + stream settings
   let privacyMode = $state('relay');
-  let relayUrl = $state('');
+  let relayUrl = $state('https://zender-relay.fly.dev');
   let resolution = $state('1280x720');
   let videoBitrate = $state('2500k');
   let audioBitrate = $state('128k');
@@ -261,7 +261,6 @@
             <div class="field relay-url-field">
               <label for="relay-url">Relay server URL</label>
               <input id="relay-url" bind:value={relayUrl} placeholder="https://zender-relay.fly.dev" />
-              <span class="field-hint">Base URL of your relay server. Leave blank to configure later.</span>
             </div>
           {/if}
           <label class="privacy-opt" class:selected={privacyMode === 'direct'}>

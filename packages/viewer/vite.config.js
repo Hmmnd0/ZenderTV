@@ -9,14 +9,14 @@ export default defineConfig({
     strictPort: true,
     clearScreen: false,
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api': 'https://zender-directory.fly.dev',
     },
   },
   preview: {
     host: true,
     port: 4173,
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api': 'https://zender-directory.fly.dev',
     },
   },
   build: {

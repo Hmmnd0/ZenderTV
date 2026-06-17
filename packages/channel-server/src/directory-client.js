@@ -26,7 +26,7 @@ export class DirectoryClient {
 
   startHeartbeat(getNowPlaying, getViewers, getEpg) {
     if (this._heartbeatTimer) return;
-    const send = async () => {
+    this._send = async () => {
       if (!this.id) return;
       try {
         await fetch(`${this.url}/api/heartbeat`, {
@@ -46,8 +46,8 @@ export class DirectoryClient {
         console.error(`[directory] heartbeat failed: ${e.message}`);
       }
     };
-    send();
-    this._heartbeatTimer = setInterval(send, 30_000);
+    this._send();
+    this._heartbeatTimer = setInterval(this._send, 30_000);
   }
 
   stopHeartbeat() {
@@ -55,16 +55,25 @@ export class DirectoryClient {
     this._heartbeatTimer = null;
   }
 
+  flushHeartbeat() {
+    if (this._send) this._send();
+  }
+
   async updateUrls({ streamUrl, thumbUrl } = {}) {
     if (!this.id) return;
-    try {
-      await fetch(`${this.url}/api/channels/${this.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.secret}` },
-        body: JSON.stringify({ stream_url: streamUrl, thumb_url: thumbUrl }),
-      });
-    } catch (e) {
-      console.error(`[directory] url update failed: ${e.message}`);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(`${this.url}/api/channels/${this.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.secret}` },
+          body: JSON.stringify({ stream_url: streamUrl, thumb_url: thumbUrl }),
+        });
+        if (res.ok) return;
+        console.error(`[directory] url update failed (${res.status}), attempt ${attempt}/3`);
+      } catch (e) {
+        console.error(`[directory] url update error: ${e.message}, attempt ${attempt}/3`);
+      }
+      await new Promise(r => setTimeout(r, 2000 * attempt));
     }
   }
 

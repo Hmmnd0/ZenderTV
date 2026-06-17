@@ -119,22 +119,4 @@ export class Broadcaster {
     });
   }
 
-  async grabThumb() {
-    const m3u8 = join(this.publicDir, 'live.m3u8');
-    if (!existsSync(m3u8)) return;
-    const lines = readFileSync(m3u8, 'utf8').split('\n');
-    const segs = lines.filter(l => l.endsWith('.ts') && !l.startsWith('#'));
-    if (!segs.length) return;
-    const lastSeg = segs[segs.length - 1];
-    const segPath = join(this.publicDir, lastSeg);
-    const thumbPath = join(this.publicDir, 'thumb.jpg');
-
-    return new Promise((resolve) => {
-      spawn('ffmpeg', [
-        '-ss', '1', '-i', segPath,
-        '-vframes', '1', '-q:v', '5',
-        '-y', thumbPath,
-      ]).on('exit', resolve);
-    });
-  }
 }

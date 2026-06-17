@@ -148,6 +148,15 @@ app.post('/api/register', registerLimit, async (req, res) => {
   const secret = uuidv4();
   const now = Math.floor(Date.now() / 1000);
 
+  // Remove any stale registration with the same name from the same IP so a
+  // restart never produces a duplicate in the guide.
+  const stale = db.prepare('SELECT id FROM channels WHERE name = ? AND reg_ip = ?').get(name, ip);
+  if (stale) {
+    db.prepare('DELETE FROM relay_tokens WHERE channel_id = ?').run(stale.id);
+    db.prepare('DELETE FROM channel_epg WHERE channel_id = ?').run(stale.id);
+    db.prepare('DELETE FROM channels WHERE id = ?').run(stale.id);
+  }
+
   db.prepare(`
     INSERT INTO channels (id, secret, name, description, genre, type, stream_url,
       thumb_url, verified, masked, reg_ip, last_seen, created_at)
