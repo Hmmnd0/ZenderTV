@@ -7,10 +7,12 @@ async fn launch_channel_server(
     script: String,
     config: String,
     cwd: String,
+    token: String,
 ) -> Result<u32, String> {
     let child = std::process::Command::new(&node_bin)
         .arg(&script)
         .arg(&config)
+        .env("CONTROL_TOKEN", &token)
         .current_dir(&cwd)
         .spawn()
         .map_err(|e| format!("Failed to spawn node: {e}"))?;
@@ -22,6 +24,7 @@ async fn launch_channel_server(
 async fn launch_channel_server_sidecar(
     app: tauri::AppHandle,
     config: String,
+    token: String,
 ) -> Result<u32, String> {
     use tauri_plugin_shell::ShellExt;
     use tauri_plugin_shell::process::CommandEvent;
@@ -31,6 +34,7 @@ async fn launch_channel_server_sidecar(
         .sidecar("channel-server")
         .map_err(|e| format!("Sidecar not found: {e}"))?
         .args([&config])
+        .env("CONTROL_TOKEN", &token)
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar: {e}"))?;
 

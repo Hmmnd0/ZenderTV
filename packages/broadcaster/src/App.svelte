@@ -7,7 +7,7 @@
   import ChannelWizard from './lib/ChannelWizard.svelte';
   import ConnectivityCheck from './lib/ConnectivityCheck.svelte';
   import ChannelInfoModal from './lib/ChannelInfoModal.svelte';
-  import { getState, fetchConfig, setOnAir, subscribeToEvents, shutdownServer } from './lib/channel-server.js';
+  import { getState, fetchConfig, setOnAir, subscribeToEvents, shutdownServer, setControlToken } from './lib/channel-server.js';
 
   const DEFAULT_STATE = { onAir: false, nowPlaying: null, upcomingQueue: [], viewers: 0, uptime: 0, mode: 'relay' };
 
@@ -92,6 +92,8 @@
     }
     try {
       const { invoke } = await import('@tauri-apps/api/core');
+      const token = crypto.randomUUID();
+      setControlToken(token);
       let pid;
       if (import.meta.env.DEV) {
         // Dev: run directly via the system Node.js binary (Vite proxy handles port rewriting)
@@ -101,12 +103,12 @@
         const configDir = configPath.substring(0, configPath.lastIndexOf('/')) || projectRoot;
         console.log('[broadcaster] dev launch:', nodeBin, serverScript);
         pid = await invoke('launch_channel_server', {
-          nodeBin, script: serverScript, config: configPath, cwd: configDir,
+          nodeBin, script: serverScript, config: configPath, cwd: configDir, token,
         });
       } else {
         // Prod: use the bundled sidecar binary
         console.log('[broadcaster] sidecar launch:', configPath);
-        pid = await invoke('launch_channel_server_sidecar', { config: configPath });
+        pid = await invoke('launch_channel_server_sidecar', { config: configPath, token });
       }
       serverPid = pid;
       console.log('[broadcaster] channel server PID:', pid);

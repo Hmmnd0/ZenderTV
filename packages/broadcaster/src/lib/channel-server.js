@@ -3,10 +3,11 @@
 //
 // Dev:  Vite proxies /control → localhost:8047, so relative URLs work.
 // Prod: No proxy exists; use the full URL directly.
-const BASE   = import.meta.env.DEV ? '' : 'http://localhost:8047';
-const WS_URL = import.meta.env.DEV
-  ? `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/control/events`
-  : 'ws://localhost:8047/control/events';
+const BASE = import.meta.env.DEV ? '' : 'http://localhost:8047';
+
+let controlToken = null;
+export function setControlToken(t) { controlToken = t; }
+function authHeaders() { return controlToken ? { Authorization: `Bearer ${controlToken}` } : {}; }
 
 let evtWs = null;
 const listeners = new Set();
@@ -17,9 +18,16 @@ export function subscribeToEvents(fn) {
   return () => listeners.delete(fn);
 }
 
+function wsUrl() {
+  const base = import.meta.env.DEV
+    ? `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/control/events`
+    : 'ws://localhost:8047/control/events';
+  return controlToken ? `${base}?token=${controlToken}` : base;
+}
+
 function ensureWs() {
   if (evtWs && evtWs.readyState <= 1) return;
-  evtWs = new WebSocket(WS_URL);
+  evtWs = new WebSocket(wsUrl());
   evtWs.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);
@@ -32,13 +40,13 @@ function ensureWs() {
 }
 
 export async function getState() {
-  const res = await fetch(`${BASE}/control/state`);
+  const res = await fetch(`${BASE}/control/state`, { headers: { ...authHeaders() } });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
 
 export async function fetchConfig() {
-  const res = await fetch(`${BASE}/control/config`);
+  const res = await fetch(`${BASE}/control/config`, { headers: { ...authHeaders() } });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
@@ -46,7 +54,7 @@ export async function fetchConfig() {
 export async function setOnAir(on) {
   const res = await fetch(`${BASE}/control/onair`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ on }),
   });
   if (!res.ok) {
@@ -60,7 +68,7 @@ export async function setOnAir(on) {
 export async function playNow(file) {
   const res = await fetch(`${BASE}/control/playnow`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ file }),
   });
   if (!res.ok) {
@@ -74,7 +82,7 @@ export async function playNow(file) {
 export async function enqueueFile(file) {
   const res = await fetch(`${BASE}/control/enqueue`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ file }),
   });
   return res.json();
@@ -83,26 +91,26 @@ export async function enqueueFile(file) {
 export async function dequeueFile(file) {
   const res = await fetch(`${BASE}/control/dequeue`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ file }),
   });
   return res.json();
 }
 
 export async function skip() {
-  const res = await fetch(`${BASE}/control/skip`, { method: 'POST' });
+  const res = await fetch(`${BASE}/control/skip`, { method: 'POST', headers: { ...authHeaders() } });
   return res.json();
 }
 
 export async function standby() {
-  const res = await fetch(`${BASE}/control/standby`, { method: 'POST' });
+  const res = await fetch(`${BASE}/control/standby`, { method: 'POST', headers: { ...authHeaders() } });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error ?? 'Standby failed');
   return body;
 }
 
 export async function resume() {
-  const res = await fetch(`${BASE}/control/resume`, { method: 'POST' });
+  const res = await fetch(`${BASE}/control/resume`, { method: 'POST', headers: { ...authHeaders() } });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error ?? 'Resume failed');
   return body;
@@ -111,7 +119,7 @@ export async function resume() {
 export async function normalizeFile(file) {
   const res = await fetch(`${BASE}/control/normalize`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ file }),
   });
   return res.json();
@@ -120,7 +128,7 @@ export async function normalizeFile(file) {
 export async function setBumpers(playlist, { everyN = null, intervalMins = null } = {}) {
   const res = await fetch(`${BASE}/control/bumpers`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ playlist, everyN, intervalMins }),
   });
   return res.json();
@@ -128,7 +136,7 @@ export async function setBumpers(playlist, { everyN = null, intervalMins = null 
 
 export async function shutdownServer() {
   try {
-    await fetch(`${BASE}/control/shutdown`, { method: 'POST' });
+    await fetch(`${BASE}/control/shutdown`, { method: 'POST', headers: { ...authHeaders() } });
   } catch { /* server closes connection as it exits — fetch may throw */ }
 }
 

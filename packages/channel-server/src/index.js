@@ -18,6 +18,8 @@ import { ensureNormalized, generateStandby, isAudioFile, isMediaFile } from './n
 const configPath = process.argv[2] ?? 'channel.toml';
 const cfg = loadConfig(configPath);
 
+const CONTROL_TOKEN = process.env.CONTROL_TOKEN ?? null;
+
 // Operational files (cache, segments, playlist) live in ~/Movies/ZenderTV/<channel>/
 // so they never clutter the user's media folder.
 const safeName = cfg.channel.name.replace(/[^a-z0-9_-]/gi, '_').slice(0, 64) || 'channel';
@@ -214,7 +216,7 @@ async function _goOnAir() {
         }
       })();
       broadcastStartup('registering');
-      const { id, secret } = await directory.register(initStreamUrl, initThumbUrl, isRelay);
+      const { id, secret } = await directory.register(initStreamUrl, initThumbUrl, !!isRelay);
 
       if (isRelay) {
         const base = cfg.server.relayBaseUrl.replace(/\/$/, '');
@@ -274,6 +276,15 @@ function relayPublicUrl() {
 // --- HTTP server ---
 const app = express();
 app.use(express.json());
+
+function requireControlToken(req, res, next) {
+  if (!CONTROL_TOKEN) return next();
+  const auth = req.headers.authorization;
+  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (token !== CONTROL_TOKEN) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+app.use('/control', requireControlToken);
 
 app.use('/stream', (req, res, next) => {
   viewers.record(req.ip);
@@ -549,7 +560,11 @@ app.post('/control/relay-url', (req, res) => {
 
 const server = createServer(app);
 server.on('upgrade', (req, socket, head) => {
-  if (req.url === '/control/events') {
+  if (req.url?.startsWith('/control/events')) {
+    if (CONTROL_TOKEN) {
+      const params = new URL(req.url, 'http://localhost').searchParams;
+      if (params.get('token') !== CONTROL_TOKEN) { socket.destroy(); return; }
+    }
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   } else {
     socket.destroy();

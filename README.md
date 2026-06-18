@@ -1,4 +1,4 @@
-# Zender
+# ZenderTV
 
 Self-hosted internet TV and radio broadcasting. Point it at a folder of videos or music, hit **ON AIR**, and your channel appears in a public guide where anyone can tune in — from a browser or a desktop app.
 

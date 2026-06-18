@@ -39,12 +39,12 @@ folder        = "media/ids"
 pick          = "random"
 
 [directory]
-url    = "http://localhost:3001"
+url    = "https://zender-directory.fly.dev"
 public = true
 
 # mode: "relay" (recommended, IP private) or "direct" (lower latency, IP exposed)
 [server]
 port       = 8047
 mode       = "relay"
-relay_url  = ""        # set to your relay ingest URL, e.g. https://relay.zender.example/ingest/<channel-id>/
+relay_url  = "https://zender-relay.fly.dev"
 public_url = ""        # auto-detected when blank; override if behind a relay
