@@ -331,6 +331,22 @@ app.get('/api/admin/flagged', (req, res) => {
   res.json(rows.map(channelFromRow));
 });
 
+// Prune channels that have been offline for more than 24 hours
+const pruneStale = db.transaction(() => {
+  const cutoff = Math.floor(Date.now() / 1000) - 86_400;
+  const stale = db.prepare('SELECT id FROM channels WHERE last_seen < ? AND banned = 0').all(cutoff);
+  if (!stale.length) return 0;
+  const delTokens = db.prepare('DELETE FROM relay_tokens WHERE channel_id = ?');
+  const delEpg    = db.prepare('DELETE FROM channel_epg WHERE channel_id = ?');
+  const delCh     = db.prepare('DELETE FROM channels WHERE id = ?');
+  for (const { id } of stale) { delTokens.run(id); delEpg.run(id); delCh.run(id); }
+  return stale.length;
+});
+setInterval(() => {
+  const n = pruneStale();
+  if (n > 0) console.log(`[directory] pruned ${n} stale channel(s)`);
+}, 60 * 60 * 1000); // run hourly
+
 // Health check
 app.get('/health', (req, res) => res.json({ ok: true, channels: db.prepare('SELECT COUNT(*) as n FROM channels WHERE banned=0').get().n }));
 
