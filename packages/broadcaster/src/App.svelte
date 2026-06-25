@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import TransmitterBar from './lib/TransmitterBar.svelte';
   import Library from './lib/Library.svelte';
   import Queue from './lib/Queue.svelte';
@@ -7,7 +7,7 @@
   import ChannelWizard from './lib/ChannelWizard.svelte';
   import ConnectivityCheck from './lib/ConnectivityCheck.svelte';
   import ChannelInfoModal from './lib/ChannelInfoModal.svelte';
-  import { getState, fetchConfig, setOnAir, subscribeToEvents, shutdownServer, setControlToken } from './lib/channel-server.js';
+  import { getState, fetchConfig, setOnAir, subscribeToEvents, shutdownServer, setControlToken, enqueueFile } from './lib/channel-server.js';
 
   const DEFAULT_STATE = { onAir: false, nowPlaying: null, upcomingQueue: [], viewers: 0, uptime: 0, mode: 'relay' };
 
@@ -41,6 +41,18 @@
     // Surface the last-used channel so the user can resume it deliberately
     if (!connected && isTauri) {
       lastTomlPath = localStorage.getItem('zender_last_toml');
+    }
+
+    if (isTauri) {
+      const { listen } = await import('@tauri-apps/api/event');
+      const unlistenDrop = await listen('tauri://drag-drop', (e) => {
+        if (!connected) return;
+        const media = /\.(mp4|mkv|avi|mov|wmv|flv|ts|mp3|flac|aac|ogg|wav|m4a)$/i;
+        for (const p of e.payload?.paths ?? []) {
+          if (media.test(p)) enqueueFile(p).catch(() => {});
+        }
+      });
+      onDestroy(unlistenDrop);
     }
 
     const unsub = subscribeToEvents((msg) => {

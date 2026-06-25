@@ -27,6 +27,15 @@
   const isStandby = $derived(s.nowPlaying === 'STANDBY');
 
   let standbyError = $state(null);
+  let dragOver = $state(false);
+
+  async function handleDrop(e) {
+    e.preventDefault();
+    dragOver = false;
+    const path = e.dataTransfer.getData('application/x-zender-file');
+    if (path) await enqueueFile(path).catch(() => {});
+  }
+
   async function handleStandbyToggle() {
     standbyError = null;
     try {
@@ -56,7 +65,11 @@
   {/if}
 
   <div class="section-header">UP NEXT</div>
-  <div class="upcoming-list">
+  <div class="upcoming-list"
+       class:drop-over={dragOver}
+       ondragover={(e) => { e.preventDefault(); dragOver = true; }}
+       ondragleave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) dragOver = false; }}
+       ondrop={handleDrop}>
     {#if pending.length === 0 && upcoming.length === 0}
       <div class="empty-queue">
         {#if s.onAir}
@@ -159,7 +172,8 @@
 
   .idle { padding: 0.5rem; color: #333; }
 
-  .upcoming-list { overflow-y: auto; flex: 1; }
+  .upcoming-list { overflow-y: auto; flex: 1; transition: background 0.1s; }
+  .upcoming-list.drop-over { background: #0a1a10; outline: 2px dashed #4a9; outline-offset: -2px; }
 
   .upcoming-row {
     display: flex;

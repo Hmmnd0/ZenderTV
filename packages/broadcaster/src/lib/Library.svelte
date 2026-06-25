@@ -164,7 +164,9 @@
         </div>
         <div class="files">
           {#each (folderFiles[folder] ?? []) as file}
-            <div class="file-row">
+            <div class="file-row"
+                 draggable="true"
+                 ondragstart={(e) => { e.dataTransfer.setData('application/x-zender-file', file.path); e.dataTransfer.effectAllowed = 'copy'; }}>
               <span class="file-name" title={file.path}>{file.name}</span>
               <span class="file-status">
                 {#if normStatus[file.path] === 'pending'}
@@ -289,7 +291,9 @@
     padding: 0.2rem 0.5rem;
     border-bottom: 1px solid #0d0d0d;
     gap: 0.5rem;
+    cursor: grab;
   }
+  .file-row:active { cursor: grabbing; }
 
   .file-row:hover { background: #111; }
   .file-row:hover .file-status { display: flex; }

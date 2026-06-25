@@ -5,6 +5,7 @@
   import { toggleFavorite, isFavorite } from './favorites.js';
   import Epg from './Epg.svelte';
   import Standby from './Standby.svelte';
+  import Marquee from './Marquee.svelte';
 
   let { channel, onUp, onDown, onClose } = $props();
 
@@ -134,19 +135,18 @@
       {/if}
       <div class="meta-block">
         <div class="name-row">
-          <span class="name">{channel.name}</span>
+          <span class="name"><Marquee text={channel.name} /></span>
           <button class="star-btn" class:starred onclick={handleStar} title={starred ? 'Remove favorite' : 'Add to favorites'}>★</button>
           {#if channel.masked}<span class="badge">RELAY</span>{/if}
           {#if channel.genre}<span class="genre">{channel.genre}</span>{/if}
           <span class="viewers">{channel.viewers ?? 0} watching</span>
         </div>
         {#if channel.description}
-          <div class="description">{channel.description}</div>
-        {:else if channel.now_playing}
-          <div class="now-playing">▶ {channel.now_playing.split('/').pop()?.replace(/(\.\w{2,4})?\.norm\.ts$/, '').replace(/\.\w{2,4}$/, '') ?? channel.now_playing}</div>
+          <div class="description"><Marquee text={channel.description} /></div>
         {/if}
-        {#if channel.description && channel.now_playing}
-          <div class="now-playing">▶ {channel.now_playing.split('/').pop()?.replace(/(\.\w{2,4})?\.norm\.ts$/, '').replace(/\.\w{2,4}$/, '') ?? channel.now_playing}</div>
+        {#if channel.now_playing}
+          {@const np = channel.now_playing.split('/').pop()?.replace(/(\.\w{2,4})?\.norm\.ts$/, '').replace(/\.\w{2,4}$/, '') ?? channel.now_playing}
+          <div class="now-playing"><Marquee text="▶ {np}" /></div>
         {/if}
       </div>
     </div>
@@ -273,9 +273,9 @@
     min-width: 0;
   }
 
-  .name { font-weight: bold; font-size: 0.95rem; white-space: nowrap; }
-  .description { font-size: 0.72rem; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .now-playing { font-size: 0.78rem; color: #aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .name { font-weight: bold; font-size: 0.95rem; flex: 1; min-width: 0; max-width: 260px; }
+  .description { font-size: 0.72rem; color: #666; }
+  .now-playing { font-size: 0.78rem; color: #aaa; }
   .genre { font-size: 0.7rem; color: #555; white-space: nowrap; }
   .viewers { font-size: 0.72rem; color: #777; white-space: nowrap; }
 
