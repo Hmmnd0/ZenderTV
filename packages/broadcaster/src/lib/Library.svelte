@@ -168,7 +168,8 @@
                  draggable="true"
                  ondragstart={(e) => { e.dataTransfer.setData('application/x-zender-file', file.path); e.dataTransfer.effectAllowed = 'copy'; }}>
               <span class="file-name" title={file.path}>{file.name}</span>
-              <span class="file-status">
+              <!-- Secondary actions: hover-only -->
+              <span class="file-status secondary">
                 {#if normStatus[file.path] === 'pending'}
                   <span class="badge pending">transcoding…</span>
                 {:else if normStatus[file.path] === 'done'}
@@ -184,6 +185,9 @@
                   onclick={() => toggleBumper(file.path)}
                   title={bumperSet.has(file.path) ? 'Remove bumper tag' : 'Tag as bumper'}
                 >🎬</button>
+              </span>
+              <!-- Primary actions: always visible -->
+              <span class="file-status primary">
                 {#if connected}
                   <button
                     class="mini play-now"
@@ -296,7 +300,7 @@
   .file-row:active { cursor: grabbing; }
 
   .file-row:hover { background: #111; }
-  .file-row:hover .file-status { display: flex; }
+  .file-row:hover .file-status.secondary { display: flex; }
 
   .file-name {
     flex: 1;
@@ -312,6 +316,10 @@
     gap: 0.25rem;
     align-items: center;
     flex-shrink: 0;
+  }
+
+  .file-status.primary {
+    display: flex;
   }
 
   .mini {
