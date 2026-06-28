@@ -190,7 +190,7 @@
             {/each}
           </div>
           <span class="block-time">{block.start}</span>
-          <span class="block-folder" title={block.folder}>📁 {folderName(block.folder)}</span>
+          <button class="block-folder" title={block.folder} onclick={() => pickFolder(block)}>📁 {folderName(block.folder)}</button>
           <span class="block-order">{block.order ?? 'shuffle'}</span>
           <button class="remove-btn" onclick={() => removeBlock(i)}>✕</button>
         </div>
@@ -364,7 +364,22 @@
   .day-pill.active { background: #1e2e1e; color: #4a9; }
 
   .block-time { color: #aaa; font-size: 0.78rem; }
-  .block-folder, .rule-folder { color: #888; font-size: 0.75rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .block-folder {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 0.75rem;
+    font-family: monospace;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    cursor: pointer;
+    padding: 0;
+  }
+  .block-folder:hover { color: #ccc; }
+  .rule-folder { color: #888; font-size: 0.75rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .block-order { color: #555; font-size: 0.7rem; }
   .rule-interval { color: #aaa; }
   .rule-action { color: #555; }
