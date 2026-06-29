@@ -3,6 +3,7 @@
   import { formatUptime } from './channel-server.js';
 
   const isStartingUp = $derived(!!startupPhase && !state.onAir);
+  const isStandby = $derived(state.onAir && state.nowPlaying === 'STANDBY');
 
   const phaseLabel = $derived.by(() => {
     if (!startupPhase) return '';
@@ -15,7 +16,7 @@
   });
 </script>
 
-<div class="transmitter" class:on-air={state.onAir} class:starting-up={isStartingUp}>
+<div class="transmitter" class:on-air={state.onAir} class:starting-up={isStartingUp} class:standby={isStandby}>
   <button
     class="on-air-btn"
     class:active={state.onAir}
@@ -31,6 +32,8 @@
     <span class="led" class:lit={state.onAir} class:spin={isStartingUp}></span>
     {#if isStartingUp}
       ⟳ PREPARING
+    {:else if isStandby}
+      ⚠ STANDBY
     {:else}
       {state.onAir ? '⦿ ON AIR' : '○ OFF AIR'}
     {/if}
@@ -139,6 +142,10 @@
     box-shadow: 0 0 6px #f00;
     animation: pulse 2s infinite;
   }
+
+  .transmitter.standby { border-bottom-color: #f80; background: #1a0e00; }
+  .transmitter.standby .on-air-btn { border-color: #f80; color: #f80; }
+  .transmitter.standby .led.lit { background: #f80; box-shadow: 0 0 6px #f80; }
 
   .led.spin {
     background: #aa0;

@@ -509,6 +509,14 @@ app.get('/control/debug', (_req, res) => {
   });
 });
 
+app.post('/control/reorder', (req, res) => {
+  const { from, to } = req.body;
+  if (typeof from !== 'number' || typeof to !== 'number') return res.status(400).json({ error: 'from and to required' });
+  scheduler.reorderManual(from, to);
+  broadcast(getState());
+  res.json({ ok: true });
+});
+
 app.post('/control/dequeue', (req, res) => {
   const { file } = req.body;
   if (!file) return res.status(400).json({ error: 'file required' });

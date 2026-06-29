@@ -140,6 +140,19 @@ export async function shutdownServer() {
   } catch { /* server closes connection as it exits — fetch may throw */ }
 }
 
+export function getThumbUrl() {
+  return `${BASE}/thumb.jpg`;
+}
+
+export async function reorderQueue(from, to) {
+  const res = await fetch(`${BASE}/control/reorder`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ from, to }),
+  });
+  return res.json();
+}
+
 export function formatUptime(secs) {
   const h = Math.floor(secs / 3600).toString().padStart(2, '0');
   const m = Math.floor((secs % 3600) / 60).toString().padStart(2, '0');

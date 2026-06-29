@@ -1,5 +1,6 @@
 <script>
-  import { skip, standby, resume, dequeueFile } from './channel-server.js';
+  import { onMount } from 'svelte';
+  import { skip, standby, resume, dequeueFile, reorderQueue, getThumbUrl } from './channel-server.js';
 
   let { state: s, logs = [] } = $props();
 
@@ -28,6 +29,23 @@
 
   let standbyError = $state(null);
   let dragOver = $state(false);
+  let thumbTs = $state(Date.now());
+  let dragFromIdx = $state(null);
+  let dragOverIdx = $state(null);
+
+  onMount(() => {
+    const t = setInterval(() => { thumbTs = Date.now(); }, 30_000);
+    return () => clearInterval(t);
+  });
+
+  function handleReorderStart(i) { dragFromIdx = i; }
+  function handleReorderOver(e, i) { e.preventDefault(); dragOverIdx = i; }
+  function handleReorderLeave(i) { if (dragOverIdx === i) dragOverIdx = null; }
+  async function handleReorderDrop(i) {
+    if (dragFromIdx !== null && dragFromIdx !== i) await reorderQueue(dragFromIdx, i).catch(() => {});
+    dragFromIdx = null; dragOverIdx = null;
+  }
+  function handleReorderEnd() { dragFromIdx = null; dragOverIdx = null; }
 
   async function handleDrop(e) {
     e.preventDefault();
@@ -52,6 +70,9 @@
   <div class="section-header">NOW PLAYING</div>
   {#if s.nowPlaying && s.nowPlaying !== 'STANDBY'}
     <div class="now-playing-row">
+      <img class="live-thumb" src="{getThumbUrl()}?t={thumbTs}" alt=""
+           onerror={(e) => { e.currentTarget.style.opacity = '0'; }}
+           onload={(e) => { e.currentTarget.style.opacity = '1'; }} />
       <span class="play-icon">▶</span>
       <span class="title">{basename(s.nowPlaying)}</span>
     </div>
@@ -79,9 +100,16 @@
         {/if}
       </div>
     {:else}
-      {#each pending as item}
-        <div class="upcoming-row pending-row">
-          <span class="idx">·</span>
+      {#each pending as item, i}
+        <div class="upcoming-row pending-row"
+             draggable="true"
+             class:drag-over={dragOverIdx === i}
+             ondragstart={() => handleReorderStart(i)}
+             ondragover={(e) => handleReorderOver(e, i)}
+             ondragleave={() => handleReorderLeave(i)}
+             ondrop={() => handleReorderDrop(i)}
+             ondragend={handleReorderEnd}>
+          <span class="drag-handle">⠿</span>
           <span class="up-title">{item.name}</span>
           <span class="up-tag">queued</span>
           <button class="remove-btn" onclick={() => dequeueFile(item.path)} title="Remove from queue">✕</button>
@@ -155,8 +183,18 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.5rem 0.5rem;
+    padding: 0.4rem 0.5rem;
     color: #ddd;
+  }
+
+  .live-thumb {
+    width: 64px;
+    height: 48px;
+    object-fit: cover;
+    border: 1px solid #222;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.3s;
   }
 
   .now-playing-row.standby { color: #f84; }
@@ -201,7 +239,10 @@
   }
   .empty-queue strong { color: #555; }
 
-  .pending-row { opacity: 0.7; }
+  .pending-row { opacity: 0.7; cursor: grab; }
+  .pending-row:active { cursor: grabbing; }
+  .pending-row.drag-over { border-top: 2px solid #4a9; opacity: 1; }
+  .drag-handle { color: #333; font-size: 0.8rem; flex-shrink: 0; cursor: grab; }
   .up-tag { color: #555; font-size: 0.68rem; flex-shrink: 0; font-style: italic; }
 
   .remove-btn {

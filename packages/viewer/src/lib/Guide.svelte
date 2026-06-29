@@ -88,11 +88,11 @@
               <div class="card-desc">{ch.description}</div>
             {/if}
             {#if ch.now_playing}
-              <div class="card-np">▶ {ch.now_playing}</div>
+              {@const np = ch.now_playing.split('/').pop()?.replace(/(\.\w{2,4})?\.norm\.ts$/, '').replace(/\.\w{2,4}$/, '') ?? ch.now_playing}
+              <div class="card-np">▶ {np}</div>
             {/if}
             <div class="card-meta">
               {#if ch.genre}<span class="tag">{ch.genre}</span>{/if}
-              {#if ch.masked}<span class="tag">RELAY</span>{/if}
               <span class="viewers">{ch.viewers ?? 0} watching</span>
             </div>
           </div>

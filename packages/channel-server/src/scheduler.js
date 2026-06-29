@@ -72,6 +72,12 @@ export class Scheduler {
     if (idx !== -1) this.manualQueue.splice(idx, 1);
   }
 
+  reorderManual(from, to) {
+    if (from === to || from < 0 || to < 0 || from >= this.manualQueue.length || to >= this.manualQueue.length) return;
+    const [item] = this.manualQueue.splice(from, 1);
+    this.manualQueue.splice(to, 0, item);
+  }
+
   // Returns the next path to play (bumper or content)
   next(nowPlaying) {
     // 1. Manual queue (skip bumper logic while manually queued items are pending)

@@ -116,6 +116,19 @@
       <Standby {channel} onRetry={retryAttach} />
     {:else if error}
       <div class="error">{error}</div>
+    {:else if channel.type === 'radio'}
+      <div class="radio-screen">
+        <div class="eq">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="radio-name">{channel.name}</div>
+        {#if channel.now_playing}
+          {@const np = channel.now_playing.split('/').pop()?.replace(/(\.\w{2,4})?\.norm\.ts$/, '').replace(/\.\w{2,4}$/, '') ?? channel.now_playing}
+          <div class="radio-np">▶ {np}</div>
+        {/if}
+      </div>
+      <!-- svelte-ignore a11y_media_has_caption -->
+      <video bind:this={videoEl} autoplay playsinline style="display:none"></video>
     {:else}
       <!-- svelte-ignore a11y_media_has_caption -->
       <video bind:this={videoEl} autoplay playsinline></video>
@@ -137,7 +150,6 @@
         <div class="name-row">
           <span class="name"><Marquee text={channel.name} /></span>
           <button class="star-btn" class:starred onclick={handleStar} title={starred ? 'Remove favorite' : 'Add to favorites'}>★</button>
-          {#if channel.masked}<span class="badge">RELAY</span>{/if}
           {#if channel.genre}<span class="genre">{channel.genre}</span>{/if}
           <span class="viewers">{channel.viewers ?? 0} watching</span>
         </div>
@@ -208,6 +220,54 @@
 
   /* fills the screen so Standby can stretch to 100% */
   .screen :global(.standby) { width: 100%; height: 100%; }
+
+  .radio-screen {
+    width: 100%; height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    background: #0a0a0a;
+  }
+
+  .eq {
+    display: flex;
+    align-items: flex-end;
+    gap: 5px;
+    height: 48px;
+  }
+  .eq span {
+    display: block;
+    width: 6px;
+    background: #4a9;
+    border-radius: 2px;
+    animation: eq-bounce 0.7s ease-in-out infinite alternate;
+  }
+  .eq span:nth-child(1) { animation-duration: 0.55s; animation-delay: 0.0s; }
+  .eq span:nth-child(2) { animation-duration: 0.80s; animation-delay: 0.1s; }
+  .eq span:nth-child(3) { animation-duration: 0.60s; animation-delay: 0.2s; }
+  .eq span:nth-child(4) { animation-duration: 0.45s; animation-delay: 0.05s; }
+  .eq span:nth-child(5) { animation-duration: 0.70s; animation-delay: 0.15s; }
+  .eq span:nth-child(6) { animation-duration: 0.85s; animation-delay: 0.3s; }
+  .eq span:nth-child(7) { animation-duration: 0.50s; animation-delay: 0.08s; }
+  @keyframes eq-bounce {
+    from { height: 6px;  opacity: 0.5; }
+    to   { height: 44px; opacity: 1; }
+  }
+
+  .radio-name {
+    font-family: monospace;
+    font-size: 1.6rem;
+    font-weight: bold;
+    color: #eee;
+    letter-spacing: 0.04em;
+  }
+  .radio-np {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: #666;
+  }
 
 .info-rail {
     display: flex;
